@@ -1,0 +1,1 @@
+"""HumanitZ Discord Bot package."""

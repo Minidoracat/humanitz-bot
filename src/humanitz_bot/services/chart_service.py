@@ -1,0 +1,1 @@
+# Placeholder: Chart generation service
