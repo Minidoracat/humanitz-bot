@@ -8,6 +8,7 @@ from discord.ext import commands, tasks
 
 from humanitz_bot.services.rcon_service import RconService
 from humanitz_bot.utils.chat_parser import ChatDiffer, ChatEvent, ChatEventType
+from humanitz_bot.utils.i18n import t
 
 logger = logging.getLogger("humanitz_bot.cogs.chat_bridge")
 
@@ -95,13 +96,13 @@ class ChatBridgeCog(commands.Cog):
             return f"**{event.player_name}**: {event.message}"
 
         if event.event_type == ChatEventType.PLAYER_JOINED:
-            return f"📥 **{event.player_name}** joined the server"
+            return t("chat.joined", name=event.player_name)
 
         if event.event_type == ChatEventType.PLAYER_LEFT:
-            return f"📤 **{event.player_name}** left the server"
+            return t("chat.left", name=event.player_name)
 
         if event.event_type == ChatEventType.PLAYER_DIED:
-            return f"💀 **{event.player_name}** died"
+            return t("chat.died", name=event.player_name)
 
         return None
 

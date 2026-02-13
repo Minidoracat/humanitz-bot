@@ -11,6 +11,7 @@ from pathlib import Path
 
 from humanitz_bot.config import Settings
 from humanitz_bot.bot import create_bot
+from humanitz_bot.utils.i18n import set_locale
 
 _LOG_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -61,6 +62,7 @@ async def main() -> None:
 
     # 設定 logging
     setup_logging(settings.log_level, settings.log_retention_days)
+    set_locale(settings.locale)
     logger = logging.getLogger("humanitz_bot")
     logger.info("Starting HumanitZ Discord Bot...")
 

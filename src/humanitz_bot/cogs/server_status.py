@@ -18,6 +18,7 @@ from humanitz_bot.services.player_tracker import (
 )
 from humanitz_bot.services.rcon_service import FetchAllResult, RconService
 from humanitz_bot.services.system_stats import SystemStats, get_system_stats
+from humanitz_bot.utils.i18n import t
 from humanitz_bot.utils.formatters import (
     format_bytes,
     format_duration,
@@ -113,24 +114,26 @@ class ServerStatusCog(commands.Cog):
             info = result.server_info
             embed = discord.Embed(
                 title=info.name or "HumanitZ Server",
-                description="🟢 Online",
+                description=t("status.online"),
                 color=_COLOR_ONLINE,
             )
 
             season_emoji = get_season_emoji(info.season)
             weather_emoji = get_weather_emoji(info.weather)
+            season_name = t(f"season.{info.season}") if info.season else "?"
+            weather_name = t(f"weather.{info.weather}") if info.weather else "?"
             embed.add_field(
-                name="📋 Server Info",
+                name=t("status.server_info"),
                 value=(
-                    f"🗓️ Season: {season_emoji} {info.season} | "
-                    f"🌤️ Weather: {weather_emoji} {info.weather}\n"
-                    f"🕐 Game Time: {info.game_time} | 🎯 FPS: {info.fps}"
+                    f"🗓️ {t('status.season')}: {season_emoji} {season_name} | "
+                    f"🌤️ {t('status.weather')}: {weather_emoji} {weather_name}\n"
+                    f"🕐 {t('status.game_time')}: {info.game_time} | 🎯 FPS: {info.fps}"
                 ),
                 inline=False,
             )
 
             embed.add_field(
-                name="👥 Players",
+                name=t("status.players"),
                 value=f"**{info.player_count}** / {info.max_players}",
                 inline=False,
             )
@@ -140,29 +143,37 @@ class ServerStatusCog(commands.Cog):
                     info.player_names, online_times, now
                 )
                 if left:
-                    embed.add_field(name="Online Players", value=left, inline=True)
+                    embed.add_field(
+                        name=t("status.online_players"), value=left, inline=True
+                    )
                     embed.add_field(name="\u200b", value=right or "\u200b", inline=True)
 
             embed.add_field(
-                name="🧟 AI Status",
-                value=f"Zombies: {info.zombies} | Bandits: {info.humans} | Animals: {info.animals}",
+                name=t("status.ai_status"),
+                value=(
+                    f"{t('status.zombies')}: {info.zombies} | "
+                    f"{t('status.bandits')}: {info.humans} | "
+                    f"{t('status.animals')}: {info.animals}"
+                ),
                 inline=False,
             )
         else:
             embed = discord.Embed(
                 title="HumanitZ Server",
-                description="🔴 Offline",
+                description=t("status.offline"),
                 color=_COLOR_OFFLINE,
             )
 
         embed.add_field(
-            name="📊 System Status",
+            name=t("status.system_status"),
             value=self._format_system_stats(stats),
             inline=False,
         )
 
         embed.set_image(url="attachment://player_chart.png")
-        embed.set_footer(text=f"Last Update: {now.strftime('%m/%d/%Y, %H:%M:%S')}")
+        embed.set_footer(
+            text=f"{t('status.last_update')}: {now.strftime('%m/%d/%Y, %H:%M:%S')}"
+        )
 
         return embed
 
@@ -202,13 +213,13 @@ class ServerStatusCog(commands.Cog):
         net_sent = format_bytes(stats.net_sent_per_sec)
 
         return (
-            f"💻 CPU: {cpu_bar} {stats.cpu_percent}%\n"
-            f"🧠 Memory: {mem_bar} {stats.memory_percent}% "
+            f"💻 {t('status.cpu')}: {cpu_bar} {stats.cpu_percent}%\n"
+            f"🧠 {t('status.memory')}: {mem_bar} {stats.memory_percent}% "
             f"({stats.memory_used:.2f}/{stats.memory_total:.2f} GB)\n"
-            f"💾 Disk: {disk_bar} {stats.disk_percent}% "
+            f"💾 {t('status.disk')}: {disk_bar} {stats.disk_percent}% "
             f"({stats.disk_used:.2f}/{stats.disk_total:.2f} GB)\n"
-            f"🌐 Network: ↓{net_recv} ↑{net_sent}\n"
-            f"⏰ Uptime: {uptime}"
+            f"🌐 {t('status.network')}: ↓{net_recv} ↑{net_sent}\n"
+            f"⏰ {t('status.uptime')}: {uptime}"
         )
 
     def _load_state(self) -> None:

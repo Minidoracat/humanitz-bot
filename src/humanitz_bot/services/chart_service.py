@@ -105,8 +105,10 @@ class ChartService:
             ax.plot(x_nums, counts, color=_DISCORD_BLURPLE, linewidth=2)
             ax.fill_between(x_nums, counts, alpha=0.2, color=_DISCORD_BLURPLE)
 
-            ax.set_title("Player Count (24h)", color="white", fontsize=14)
-            ax.set_ylabel("Players", color="white")
+            from humanitz_bot.utils.i18n import t
+
+            ax.set_title(t("chart.title"), color="white", fontsize=14)
+            ax.set_ylabel(t("chart.ylabel"), color="white")
             ax.tick_params(colors="white")
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))

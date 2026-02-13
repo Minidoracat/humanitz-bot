@@ -39,6 +39,7 @@ class Settings:
     status_update_interval: int = 30
     chat_poll_interval: int = 5
     chart_history_hours: int = 24
+    locale: str = "en"
     log_level: str = "INFO"
     log_retention_days: int = 7
     player_log_path: str = (
@@ -111,6 +112,7 @@ class Settings:
         status_update_interval_str = os.getenv("STATUS_UPDATE_INTERVAL", "30").strip()
         chat_poll_interval_str = os.getenv("CHAT_POLL_INTERVAL", "5").strip()
         chart_history_hours_str = os.getenv("CHART_HISTORY_HOURS", "24").strip()
+        locale = os.getenv("LOCALE", "en").strip()
         log_level = os.getenv("LOG_LEVEL", "INFO").strip()
         log_retention_days_str = os.getenv("LOG_RETENTION_DAYS", "7").strip()
         player_log_path = os.getenv(
@@ -144,6 +146,7 @@ class Settings:
             status_update_interval=status_update_interval,
             chat_poll_interval=chat_poll_interval,
             chart_history_hours=chart_history_hours,
+            locale=locale,
             log_level=log_level,
             log_retention_days=log_retention_days,
             player_log_path=player_log_path,
