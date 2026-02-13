@@ -1,15 +1,32 @@
 [project]
 name = "humanitz-bot"
 version = "0.1.0"
-description = "Add your description here"
+description = "Discord bot for HumanitZ game servers — real-time status embed, bidirectional chat bridge, and player tracking via RCON"
 readme = "README.md"
 requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Minidoracat", email = "minidora0702@gmail.com"},
+]
+keywords = ["discord", "bot", "humanitz", "game-server", "rcon", "chat-bridge"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Communications :: Chat",
+    "Topic :: Games/Entertainment",
+]
 dependencies = [
     "discord-py>=2.6.4",
     "matplotlib>=3.10.8",
     "psutil>=7.2.2",
     "python-dotenv>=1.2.1",
 ]
+
+[project.urls]
+Repository = "https://github.com/Minidoracat/humanitz-bot"
+Issues = "https://github.com/Minidoracat/humanitz-bot/issues"
 
 [build-system]
 requires = ["uv_build>=0.9.22,<0.10.0"]

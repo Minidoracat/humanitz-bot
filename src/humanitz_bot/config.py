@@ -43,9 +43,7 @@ class Settings:
     db_retention_days: int = 30
     log_level: str = "INFO"
     log_retention_days: int = 7
-    player_log_path: str = (
-        "/home/hzserver/serverfiles/HumanitZServer/PlayerConnectedLog.txt"
-    )
+    player_log_path: str = "PlayerConnectedLog.txt"
 
     @classmethod
     def from_env(cls, env_path: str | None = None) -> Settings:
@@ -87,22 +85,18 @@ class Settings:
             missing_fields.append("CHAT_CHANNEL_ID")
 
         if missing_fields:
-            error_msg = f"缺少必要設定欄位: {', '.join(missing_fields)}\n請編輯 .env 檔案填入真實值：\n"
+            error_msg = f"Missing required settings: {', '.join(missing_fields)}\nPlease edit your .env file and fill in the values:\n"
 
             if "DISCORD_TOKEN" in missing_fields:
-                error_msg += (
-                    "  - DISCORD_TOKEN: 從 Discord Developer Portal 取得 Bot Token\n"
-                )
+                error_msg += "  - DISCORD_TOKEN: Get your Bot Token from Discord Developer Portal\n"
             if "RCON_PASSWORD" in missing_fields:
-                error_msg += "  - RCON_PASSWORD: HumanitZ 伺服器的 RCON 密碼\n"
+                error_msg += (
+                    "  - RCON_PASSWORD: RCON password from GameServerSettings.ini\n"
+                )
             if "STATUS_CHANNEL_ID" in missing_fields:
-                error_msg += (
-                    "  - STATUS_CHANNEL_ID: Discord 頻道 ID（右鍵頻道 → 複製 ID）\n"
-                )
+                error_msg += "  - STATUS_CHANNEL_ID: Discord channel ID (right-click channel → Copy ID)\n"
             if "CHAT_CHANNEL_ID" in missing_fields:
-                error_msg += (
-                    "  - CHAT_CHANNEL_ID: Discord 頻道 ID（右鍵頻道 → 複製 ID）\n"
-                )
+                error_msg += "  - CHAT_CHANNEL_ID: Discord channel ID (right-click channel → Copy ID)\n"
 
             raise ValueError(error_msg.rstrip())
 
@@ -119,7 +113,7 @@ class Settings:
         log_retention_days_str = os.getenv("LOG_RETENTION_DAYS", "7").strip()
         player_log_path = os.getenv(
             "PLAYER_LOG_PATH",
-            "/home/hzserver/serverfiles/HumanitZServer/PlayerConnectedLog.txt",
+            "PlayerConnectedLog.txt",
         ).strip()
 
         # 類型轉換
@@ -136,7 +130,7 @@ class Settings:
             db_retention_days = int(db_retention_days_str)
             log_retention_days = int(log_retention_days_str)
         except ValueError as e:
-            raise ValueError(f"設定欄位類型轉換錯誤: {e}")
+            raise ValueError(f"Configuration type conversion error: {e}")
 
         return cls(
             discord_token=discord_token,
