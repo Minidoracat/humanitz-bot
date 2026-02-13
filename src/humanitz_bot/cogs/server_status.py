@@ -136,13 +136,12 @@ class ServerStatusCog(commands.Cog):
             )
 
             if info.player_names:
-                player_lines = self._format_player_list(
+                left, right = self._format_player_columns(
                     info.player_names, online_times, now
                 )
-                if player_lines:
-                    embed.add_field(
-                        name="Online Players", value=player_lines, inline=False
-                    )
+                if left:
+                    embed.add_field(name="Online Players", value=left, inline=True)
+                    embed.add_field(name="\u200b", value=right or "\u200b", inline=True)
 
             embed.add_field(
                 name="🧟 AI Status",
@@ -168,11 +167,12 @@ class ServerStatusCog(commands.Cog):
         return embed
 
     @staticmethod
-    def _format_player_list(
+    def _format_player_columns(
         names: list[str],
         online_times: dict[str, datetime],
         now: datetime,
-    ) -> str:
+    ) -> tuple[str, str]:
+        """Return (left_column, right_column) strings for inline embed fields."""
         entries: list[str] = []
         for name in names:
             connected_at = online_times.get(name)
@@ -182,15 +182,15 @@ class ServerStatusCog(commands.Cog):
                 duration = "?"
             entries.append(f"`{name}` ({duration})")
 
-        lines: list[str] = []
-        for i in range(0, len(entries), 2):
-            pair = entries[i : i + 2]
-            lines.append("    ".join(pair))
+        mid = (len(entries) + 1) // 2
+        left = "\n".join(entries[:mid])
+        right = "\n".join(entries[mid:])
 
-        text = "\n".join(lines)
-        if len(text) > _EMBED_FIELD_LIMIT:
-            text = text[: _EMBED_FIELD_LIMIT - 20] + "\n... and more"
-        return text
+        if len(left) > _EMBED_FIELD_LIMIT:
+            left = left[: _EMBED_FIELD_LIMIT - 20] + "\n... and more"
+        if len(right) > _EMBED_FIELD_LIMIT:
+            right = right[: _EMBED_FIELD_LIMIT - 20] + "\n... and more"
+        return left, right
 
     @staticmethod
     def _format_system_stats(stats: SystemStats) -> str:
