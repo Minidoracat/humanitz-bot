@@ -48,6 +48,8 @@ src/humanitz_bot/
 - 已啟用 RCON 的 **HumanitZ 專用伺服器**
 - **Discord Bot Token**（[在此建立](https://discord.com/developers/applications)）
 
+> **注意：** Windows 環境已支援但尚未經過實際測試。如遇到問題，請[回報 Issue](https://github.com/Minidoracat/humanitz-bot/issues)。
+
 ## 快速開始
 
 ### 1. 取得專案
@@ -79,6 +81,7 @@ cp .env.example .env
 | `RCON_PASSWORD` | ✅ | RCON 密碼（對應 `GameServerSettings.ini`） |
 | `RCON_HOST` | | RCON 位址（預設：`127.0.0.1`） |
 | `RCON_PORT` | | RCON 連接埠（預設：`8888`） |
+| `STATUS_MESSAGE_ID` | | 固定狀態 Embed 到指定訊息（留空則自動建立） |
 | `LOCALE` | | `en` 或 `zh-TW`（預設：`en`） |
 | `PLAYER_LOG_PATH` | | `PlayerConnectedLog.txt` 檔案路徑 |
 

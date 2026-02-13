@@ -48,6 +48,8 @@ src/humanitz_bot/
 - A **HumanitZ dedicated server** with RCON enabled
 - A **Discord Bot Token** ([create one here](https://discord.com/developers/applications))
 
+> **Note:** Windows is supported but has not been tested in production. If you encounter any issues, please [open an issue](https://github.com/Minidoracat/humanitz-bot/issues).
+
 ## Quick Start
 
 ### 1. Clone the repository
@@ -79,6 +81,7 @@ Edit `.env` and fill in your values:
 | `RCON_PASSWORD` | ✅ | RCON password (from `GameServerSettings.ini`) |
 | `RCON_HOST` | | RCON address (default: `127.0.0.1`) |
 | `RCON_PORT` | | RCON port (default: `8888`) |
+| `STATUS_MESSAGE_ID` | | Pin the status embed to a specific message (leave blank to auto-create) |
 | `LOCALE` | | `en` or `zh-TW` (default: `en`) |
 | `PLAYER_LOG_PATH` | | Path to `PlayerConnectedLog.txt` |
 
