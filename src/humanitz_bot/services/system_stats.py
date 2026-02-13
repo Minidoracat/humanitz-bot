@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass
 
@@ -40,7 +41,7 @@ def get_system_stats() -> SystemStats:
     memory_used = mem.used / _BYTES_PER_GB
     memory_total = mem.total / _BYTES_PER_GB
 
-    disk = psutil.disk_usage("/")
+    disk = psutil.disk_usage(os.path.abspath(os.sep))
     disk_used = disk.used / _BYTES_PER_GB
     disk_total = disk.total / _BYTES_PER_GB
 

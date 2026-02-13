@@ -71,8 +71,11 @@ async def main() -> None:
 
     # Signal handling 以便優雅關閉
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(bot, logger)))
+    if sys.platform != "win32":
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(
+                sig, lambda: asyncio.create_task(shutdown(bot, logger))
+            )
 
     # 啟動 bot
     try:
