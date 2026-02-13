@@ -12,6 +12,7 @@ import discord
 from discord.ext import commands, tasks
 
 from humanitz_bot.services.chart_service import ChartService
+from humanitz_bot.services.database import Database
 from humanitz_bot.services.player_tracker import PlayerTracker
 from humanitz_bot.services.player_tracker import (
     format_duration as format_player_duration,
@@ -46,9 +47,13 @@ class ServerStatusCog(commands.Cog):
             settings.rcon_host, settings.rcon_port, settings.rcon_password
         )
         self.player_tracker = PlayerTracker(settings.player_log_path)
+        self.db = Database(
+            data_dir="data",
+            retention_days=settings.db_retention_days,
+        )
         self.chart_service = ChartService(
-            data_dir=str(Path("data")),
-            tmp_dir=str(Path("tmp")),
+            db=self.db,
+            tmp_dir="tmp",
             history_hours=settings.chart_history_hours,
         )
 
@@ -57,6 +62,7 @@ class ServerStatusCog(commands.Cog):
         self._update_interval: int = settings.status_update_interval
         self._status_message: discord.Message | None = None
         self._last_result: FetchAllResult | None = None
+        self._prune_counter: int = 0
         self._load_state()
 
     @commands.Cog.listener()
@@ -94,6 +100,11 @@ class ServerStatusCog(commands.Cog):
             embed = self._build_embed(result, online_times, stats)
 
             await self._update_message(embed, chart_path)
+
+            self._prune_counter += 1
+            if self._prune_counter >= 120:
+                self._prune_counter = 0
+                await asyncio.to_thread(self.db.prune_old_data)
 
             logger.debug("Status embed updated")
         except Exception:

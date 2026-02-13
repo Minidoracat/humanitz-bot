@@ -6,9 +6,18 @@ import re
 import discord
 from discord.ext import commands, tasks
 
+from humanitz_bot.services.database import Database
 from humanitz_bot.services.rcon_service import RconService
 from humanitz_bot.utils.chat_parser import ChatDiffer, ChatEvent, ChatEventType
 from humanitz_bot.utils.i18n import t
+
+_SESSION_EVENT_TYPES = frozenset(
+    {
+        ChatEventType.PLAYER_JOINED,
+        ChatEventType.PLAYER_LEFT,
+        ChatEventType.PLAYER_DIED,
+    }
+)
 
 logger = logging.getLogger("humanitz_bot.cogs.chat_bridge")
 
@@ -25,6 +34,12 @@ class ChatBridgeCog(commands.Cog):
         self.chat_differ = ChatDiffer()
 
         self._own_rcon: RconService | None = None
+
+    def _get_db(self) -> Database | None:
+        status_cog = self.bot.get_cog("ServerStatusCog")
+        if status_cog is not None:
+            return getattr(status_cog, "db", None)
+        return None
 
     def _get_rcon(self) -> RconService:
         status_cog = self.bot.get_cog("ServerStatusCog")
@@ -73,7 +88,10 @@ class ChatBridgeCog(commands.Cog):
                 )
                 return
 
+            db = self._get_db()
             for event in new_events:
+                if db and event.event_type != ChatEventType.UNKNOWN:
+                    self._log_event(db, event)
                 msg = self._format_event(event)
                 if msg:
                     await channel.send(msg)
@@ -84,6 +102,19 @@ class ChatBridgeCog(commands.Cog):
     @poll_chat.before_loop
     async def before_poll_chat(self) -> None:
         await self.bot.wait_until_ready()
+
+    @staticmethod
+    def _log_event(db: Database, event: ChatEvent) -> None:
+        db.add_chat_event(
+            event_type=event.event_type.value,
+            player_name=event.player_name,
+            message=event.message,
+        )
+        if event.event_type in _SESSION_EVENT_TYPES:
+            db.add_player_session_event(
+                player_name=event.player_name,
+                event_type=event.event_type.value,
+            )
 
     @staticmethod
     def _format_event(event: ChatEvent) -> str | None:
