@@ -11,14 +11,12 @@ from humanitz_bot.rcon_client import RconConnectionError, SourceRCON
 
 logger = logging.getLogger("humanitz_bot.rcon")
 
-MAX_PLAYERS_DEFAULT = 24
-
 
 @dataclass
 class ServerInfo:
     name: str = ""
     player_count: int = 0
-    max_players: int = MAX_PLAYERS_DEFAULT
+    max_players: int = 50
     season: str = ""
     weather: str = ""
     game_time: str = ""

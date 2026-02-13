@@ -86,6 +86,7 @@ cp .env.example .env
 | `RCON_HOST` | | RCON 位址（預設：`127.0.0.1`） |
 | `RCON_PORT` | | RCON 連接埠（預設：`8888`） |
 | `STATUS_MESSAGE_ID` | | 固定狀態 Embed 到指定訊息（留空則自動建立） |
+| `MAX_PLAYERS` | | 伺服器最大玩家人數，對應 `GameServerSettings.ini`（預設：`50`） |
 | `SHOW_SYSTEM_STATS` | | 顯示主機系統資源（預設：`true`；遠端架設建議設為 `false`） |
 | `LOCALE` | | `en` 或 `zh-TW`（預設：`en`） |
 | `PLAYER_LOG_PATH` | | `PlayerConnectedLog.txt` 檔案路徑 |

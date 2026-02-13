@@ -40,6 +40,7 @@ class Settings:
     chat_poll_interval: int = 5
     chart_history_hours: int = 24
     locale: str = "en"
+    max_players: int = 50
     show_system_stats: bool = True
     date_format: str = "%Y/%m/%d %H:%M:%S"
     db_retention_days: int = 30
@@ -110,6 +111,7 @@ class Settings:
         chat_poll_interval_str = os.getenv("CHAT_POLL_INTERVAL", "5").strip()
         chart_history_hours_str = os.getenv("CHART_HISTORY_HOURS", "24").strip()
         locale = os.getenv("LOCALE", "en").strip()
+        max_players_str = os.getenv("MAX_PLAYERS", "50").strip()
         show_system_stats = os.getenv("SHOW_SYSTEM_STATS", "true").strip().lower() in (
             "true",
             "1",
@@ -135,6 +137,7 @@ class Settings:
             status_update_interval = int(status_update_interval_str)
             chat_poll_interval = int(chat_poll_interval_str)
             chart_history_hours = int(chart_history_hours_str)
+            max_players = int(max_players_str)
             db_retention_days = int(db_retention_days_str)
             log_retention_days = int(log_retention_days_str)
         except ValueError as e:
@@ -152,6 +155,7 @@ class Settings:
             chat_poll_interval=chat_poll_interval,
             chart_history_hours=chart_history_hours,
             locale=locale,
+            max_players=max_players,
             show_system_stats=show_system_stats,
             date_format=date_format,
             db_retention_days=db_retention_days,

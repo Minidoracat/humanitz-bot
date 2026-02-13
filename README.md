@@ -86,6 +86,7 @@ Edit `.env` and fill in your values:
 | `RCON_HOST` | | RCON address (default: `127.0.0.1`) |
 | `RCON_PORT` | | RCON port (default: `8888`) |
 | `STATUS_MESSAGE_ID` | | Pin the status embed to a specific message (leave blank to auto-create) |
+| `MAX_PLAYERS` | | Max player count from `GameServerSettings.ini` (default: `50`) |
 | `SHOW_SYSTEM_STATS` | | Show host system stats in embed (default: `true`; set `false` for remote setups) |
 | `LOCALE` | | `en` or `zh-TW` (default: `en`) |
 | `PLAYER_LOG_PATH` | | Path to `PlayerConnectedLog.txt` |

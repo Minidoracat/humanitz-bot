@@ -60,6 +60,7 @@ class ServerStatusCog(commands.Cog):
         self.status_channel_id: int = settings.status_channel_id
         self.status_message_id: int | None = settings.status_message_id
         self._update_interval: int = settings.status_update_interval
+        self._max_players: int = settings.max_players
         self._show_system_stats: bool = settings.show_system_stats
         self._date_format: str = settings.date_format
         self._status_message: discord.Message | None = None
@@ -85,6 +86,9 @@ class ServerStatusCog(commands.Cog):
         try:
             result = await self.rcon.fetch_all()
             self._last_result = result
+
+            if result.server_info:
+                result.server_info.max_players = self._max_players
 
             online_times: dict[str, datetime] = {}
             if result.server_info and result.server_info.player_names:
