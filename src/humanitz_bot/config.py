@@ -10,6 +10,17 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger("humanitz_bot.config")
 
+_PLACEHOLDER_PATTERNS = ("YOUR_", "PLACEHOLDER", "CHANGEME", "TODO", "REPLACE")
+
+
+def _is_placeholder(value: str) -> bool:
+    if not value:
+        return False
+    upper = value.upper()
+    return any(
+        upper.startswith(p) or upper.endswith("_HERE") for p in _PLACEHOLDER_PATTERNS
+    )
+
 
 @dataclass
 class Settings:
@@ -57,26 +68,40 @@ class Settings:
         missing_fields = []
 
         discord_token = os.getenv("DISCORD_TOKEN", "").strip()
-        if not discord_token:
+        if not discord_token or _is_placeholder(discord_token):
             missing_fields.append("DISCORD_TOKEN")
 
         rcon_password = os.getenv("RCON_PASSWORD", "").strip()
-        if not rcon_password:
+        if not rcon_password or _is_placeholder(rcon_password):
             missing_fields.append("RCON_PASSWORD")
 
         status_channel_id_str = os.getenv("STATUS_CHANNEL_ID", "").strip()
-        if not status_channel_id_str:
+        if not status_channel_id_str or status_channel_id_str == "0":
             missing_fields.append("STATUS_CHANNEL_ID")
 
         chat_channel_id_str = os.getenv("CHAT_CHANNEL_ID", "").strip()
-        if not chat_channel_id_str:
+        if not chat_channel_id_str or chat_channel_id_str == "0":
             missing_fields.append("CHAT_CHANNEL_ID")
 
         if missing_fields:
-            raise ValueError(
-                f"缺少必要設定欄位: {', '.join(missing_fields)}\n"
-                f"請確認 .env 檔案包含所有必要設定。"
-            )
+            error_msg = f"缺少必要設定欄位: {', '.join(missing_fields)}\n請編輯 .env 檔案填入真實值：\n"
+
+            if "DISCORD_TOKEN" in missing_fields:
+                error_msg += (
+                    "  - DISCORD_TOKEN: 從 Discord Developer Portal 取得 Bot Token\n"
+                )
+            if "RCON_PASSWORD" in missing_fields:
+                error_msg += "  - RCON_PASSWORD: HumanitZ 伺服器的 RCON 密碼\n"
+            if "STATUS_CHANNEL_ID" in missing_fields:
+                error_msg += (
+                    "  - STATUS_CHANNEL_ID: Discord 頻道 ID（右鍵頻道 → 複製 ID）\n"
+                )
+            if "CHAT_CHANNEL_ID" in missing_fields:
+                error_msg += (
+                    "  - CHAT_CHANNEL_ID: Discord 頻道 ID（右鍵頻道 → 複製 ID）\n"
+                )
+
+            raise ValueError(error_msg.rstrip())
 
         # 讀取選用欄位（含預設值）
         rcon_host = os.getenv("RCON_HOST", "127.0.0.1").strip()
