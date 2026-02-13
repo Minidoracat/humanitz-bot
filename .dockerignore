@@ -1,0 +1,10 @@
+.git
+.venv
+.env
+__pycache__
+*.py[oc]
+data/
+logs/
+tmp/
+.uv/
+uv.lock

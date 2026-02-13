@@ -93,6 +93,15 @@ cp .env.example .env
 uv run python -m humanitz_bot
 ```
 
+### 使用 Docker 啟動
+
+```bash
+cp .env.example .env   # 先編輯 .env
+docker compose up -d
+```
+
+> **注意：** 系統資源（CPU、記憶體、磁碟）顯示的是容器內的數值，而非宿主機。
+
 ### HumanitZ 伺服器設定
 
 確保 `GameServerSettings.ini` 已啟用 RCON：

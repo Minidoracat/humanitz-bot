@@ -93,6 +93,15 @@ See [`.env.example`](.env.example) for all options with detailed descriptions.
 uv run python -m humanitz_bot
 ```
 
+### Run with Docker
+
+```bash
+cp .env.example .env   # edit .env first
+docker compose up -d
+```
+
+> **Note:** System stats (CPU, memory, disk) will reflect the container's resources, not the host machine.
+
 ### HumanitZ Server Configuration
 
 Make sure RCON is enabled in your `GameServerSettings.ini`:
