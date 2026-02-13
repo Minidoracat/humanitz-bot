@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import discord
@@ -107,7 +107,7 @@ class ServerStatusCog(commands.Cog):
         online_times: dict[str, datetime],
         stats: SystemStats,
     ) -> discord.Embed:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now()
 
         if result.online and result.server_info:
             info = result.server_info
@@ -177,8 +177,6 @@ class ServerStatusCog(commands.Cog):
         for name in names:
             connected_at = online_times.get(name)
             if connected_at:
-                if connected_at.tzinfo is None:
-                    connected_at = connected_at.replace(tzinfo=timezone.utc)
                 duration = format_player_duration(now - connected_at)
             else:
                 duration = "?"
