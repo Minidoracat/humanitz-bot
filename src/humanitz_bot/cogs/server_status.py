@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -30,6 +31,7 @@ logger = logging.getLogger("humanitz_bot.cogs.server_status")
 _COLOR_ONLINE = 0x2ECC71
 _COLOR_OFFLINE = 0xE74C3C
 _EMBED_FIELD_LIMIT = 1024
+_STATE_FILE = Path("data/status_state.json")
 
 
 class ServerStatusCog(commands.Cog):
@@ -53,6 +55,7 @@ class ServerStatusCog(commands.Cog):
         self._update_interval: int = settings.status_update_interval
         self._status_message: discord.Message | None = None
         self._last_result: FetchAllResult | None = None
+        self._load_state()
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
@@ -210,6 +213,39 @@ class ServerStatusCog(commands.Cog):
             f"⏰ Uptime: {uptime}"
         )
 
+    def _load_state(self) -> None:
+        """從 data/status_state.json 載入持久化的 message ID。"""
+        if self.status_message_id is not None:
+            logger.debug("Using STATUS_MESSAGE_ID from .env, skipping state file")
+            return
+
+        try:
+            if _STATE_FILE.exists():
+                data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+                saved_channel = data.get("channel_id")
+                saved_msg = data.get("message_id")
+                if saved_channel == self.status_channel_id and saved_msg:
+                    self.status_message_id = int(saved_msg)
+                    logger.info(
+                        "Loaded saved status message ID: %d", self.status_message_id
+                    )
+        except Exception:
+            logger.warning("Failed to load status state, will create new message")
+
+    def _save_state(self, message_id: int) -> None:
+        """將 message ID 寫入 data/status_state.json 以持久化。"""
+        try:
+            _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _STATE_FILE.write_text(
+                json.dumps(
+                    {"channel_id": self.status_channel_id, "message_id": message_id}
+                ),
+                encoding="utf-8",
+            )
+            logger.debug("Saved status message ID: %d", message_id)
+        except Exception:
+            logger.warning("Failed to save status state")
+
     async def _update_message(
         self, embed: discord.Embed, chart_path: str | None
     ) -> None:
@@ -258,6 +294,7 @@ class ServerStatusCog(commands.Cog):
         else:
             self._status_message = await channel.send(embed=embed)
         logger.info("Created new status message: %d", self._status_message.id)
+        self._save_state(self._status_message.id)
 
 
 async def setup(bot: commands.Bot) -> None:
