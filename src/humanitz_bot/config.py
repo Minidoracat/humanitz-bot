@@ -40,6 +40,7 @@ class Settings:
     chat_poll_interval: int = 5
     chart_history_hours: int = 24
     log_level: str = "INFO"
+    log_retention_days: int = 7
     player_log_path: str = (
         "/home/hzserver/serverfiles/HumanitZServer/PlayerConnectedLog.txt"
     )
@@ -111,6 +112,7 @@ class Settings:
         chat_poll_interval_str = os.getenv("CHAT_POLL_INTERVAL", "5").strip()
         chart_history_hours_str = os.getenv("CHART_HISTORY_HOURS", "24").strip()
         log_level = os.getenv("LOG_LEVEL", "INFO").strip()
+        log_retention_days_str = os.getenv("LOG_RETENTION_DAYS", "7").strip()
         player_log_path = os.getenv(
             "PLAYER_LOG_PATH",
             "/home/hzserver/serverfiles/HumanitZServer/PlayerConnectedLog.txt",
@@ -127,6 +129,7 @@ class Settings:
             status_update_interval = int(status_update_interval_str)
             chat_poll_interval = int(chat_poll_interval_str)
             chart_history_hours = int(chart_history_hours_str)
+            log_retention_days = int(log_retention_days_str)
         except ValueError as e:
             raise ValueError(f"設定欄位類型轉換錯誤: {e}")
 
@@ -142,5 +145,6 @@ class Settings:
             chat_poll_interval=chat_poll_interval,
             chart_history_hours=chart_history_hours,
             log_level=log_level,
+            log_retention_days=log_retention_days,
             player_log_path=player_log_path,
         )

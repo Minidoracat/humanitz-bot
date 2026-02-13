@@ -15,6 +15,7 @@ wheels/
 # Project-specific
 tmp/*.png
 data/*.json
+logs/
 
 # UV
 .uv/

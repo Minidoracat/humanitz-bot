@@ -6,23 +6,42 @@ import asyncio
 import logging
 import signal
 import sys
+from logging.handlers import TimedRotatingFileHandler
+from pathlib import Path
+
 from humanitz_bot.config import Settings
 from humanitz_bot.bot import create_bot
 
+_LOG_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
+_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+_LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
 
-def setup_logging(level: str = "INFO") -> None:
-    """
-    設定 logging 格式與等級
 
-    Args:
-        level: Log 等級（DEBUG, INFO, WARNING, ERROR, CRITICAL）
-    """
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        stream=sys.stdout,
+def setup_logging(level: str = "INFO", retention_days: int = 7) -> None:
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    log_level = getattr(logging, level.upper(), logging.INFO)
+    formatter = logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT)
+
+    file_handler = TimedRotatingFileHandler(
+        filename=_LOG_DIR / "bot.log",
+        when="midnight",
+        interval=1,
+        backupCount=retention_days,
+        encoding="utf-8",
     )
+    file_handler.suffix = "%Y-%m-%d"
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(formatter)
+
+    root = logging.getLogger()
+    root.setLevel(log_level)
+    root.addHandler(file_handler)
+    root.addHandler(console_handler)
 
 
 async def shutdown(bot, logger):
@@ -41,7 +60,7 @@ async def main() -> None:
         sys.exit(1)
 
     # 設定 logging
-    setup_logging(settings.log_level)
+    setup_logging(settings.log_level, settings.log_retention_days)
     logger = logging.getLogger("humanitz_bot")
     logger.info("Starting HumanitZ Discord Bot...")
 
