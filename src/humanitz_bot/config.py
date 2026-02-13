@@ -40,6 +40,7 @@ class Settings:
     chat_poll_interval: int = 5
     chart_history_hours: int = 24
     locale: str = "en"
+    show_system_stats: bool = True
     db_retention_days: int = 30
     log_level: str = "INFO"
     log_retention_days: int = 7
@@ -108,6 +109,11 @@ class Settings:
         chat_poll_interval_str = os.getenv("CHAT_POLL_INTERVAL", "5").strip()
         chart_history_hours_str = os.getenv("CHART_HISTORY_HOURS", "24").strip()
         locale = os.getenv("LOCALE", "en").strip()
+        show_system_stats = os.getenv("SHOW_SYSTEM_STATS", "true").strip().lower() in (
+            "true",
+            "1",
+            "yes",
+        )
         db_retention_days_str = os.getenv("DB_RETENTION_DAYS", "30").strip()
         log_level = os.getenv("LOG_LEVEL", "INFO").strip()
         log_retention_days_str = os.getenv("LOG_RETENTION_DAYS", "7").strip()
@@ -144,6 +150,7 @@ class Settings:
             chat_poll_interval=chat_poll_interval,
             chart_history_hours=chart_history_hours,
             locale=locale,
+            show_system_stats=show_system_stats,
             db_retention_days=db_retention_days,
             log_level=log_level,
             log_retention_days=log_retention_days,

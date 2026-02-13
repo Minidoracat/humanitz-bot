@@ -60,6 +60,7 @@ class ServerStatusCog(commands.Cog):
         self.status_channel_id: int = settings.status_channel_id
         self.status_message_id: int | None = settings.status_message_id
         self._update_interval: int = settings.status_update_interval
+        self._show_system_stats: bool = settings.show_system_stats
         self._status_message: discord.Message | None = None
         self._last_result: FetchAllResult | None = None
         self._prune_counter: int = 0
@@ -91,7 +92,11 @@ class ServerStatusCog(commands.Cog):
                     result.server_info.player_names,
                 )
 
-            stats = await asyncio.to_thread(get_system_stats)
+            stats = (
+                await asyncio.to_thread(get_system_stats)
+                if self._show_system_stats
+                else None
+            )
 
             player_count = result.server_info.player_count if result.server_info else 0
             await asyncio.to_thread(self.chart_service.add_data_point, player_count)
@@ -118,7 +123,7 @@ class ServerStatusCog(commands.Cog):
         self,
         result: FetchAllResult,
         online_times: dict[str, datetime],
-        stats: SystemStats,
+        stats: SystemStats | None,
     ) -> discord.Embed:
         now = datetime.now()
 
@@ -176,11 +181,12 @@ class ServerStatusCog(commands.Cog):
                 color=_COLOR_OFFLINE,
             )
 
-        embed.add_field(
-            name=t("status.system_status"),
-            value=self._format_system_stats(stats),
-            inline=False,
-        )
+        if stats is not None:
+            embed.add_field(
+                name=t("status.system_status"),
+                value=self._format_system_stats(stats),
+                inline=False,
+            )
 
         embed.set_image(url="attachment://player_chart.png")
         embed.set_footer(

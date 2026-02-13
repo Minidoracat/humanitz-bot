@@ -18,6 +18,10 @@ A Discord bot for [HumanitZ](https://store.steampowered.com/app/1935610/HumanitZ
 - **🌐 Internationalization** — English and Traditional Chinese (繁體中文) UI support
 - **📝 Daily Rotated Logs** — Configurable log retention with daily rotation
 
+## Screenshots
+
+![Server Status Embed](docs/images/status-embed-en.png)
+
 ## Architecture
 
 ```
@@ -82,6 +86,7 @@ Edit `.env` and fill in your values:
 | `RCON_HOST` | | RCON address (default: `127.0.0.1`) |
 | `RCON_PORT` | | RCON port (default: `8888`) |
 | `STATUS_MESSAGE_ID` | | Pin the status embed to a specific message (leave blank to auto-create) |
+| `SHOW_SYSTEM_STATS` | | Show host system stats in embed (default: `true`; set `false` for remote setups) |
 | `LOCALE` | | `en` or `zh-TW` (default: `en`) |
 | `PLAYER_LOG_PATH` | | Path to `PlayerConnectedLog.txt` |
 
