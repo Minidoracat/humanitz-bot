@@ -21,13 +21,15 @@ _DISCORD_DARK = "#2b2d31"
 _DISCORD_BLURPLE = "#5865F2"
 _CHART_FILENAME = "player_chart.png"
 _HISTORY_FILENAME = "player_history.json"
-_MAX_AGE = timedelta(hours=24)
 
 
 class ChartService:
     """記錄玩家人數歷史並生成 Discord 風格深色折線圖。"""
 
-    def __init__(self, data_dir: str = "data", tmp_dir: str = "tmp") -> None:
+    def __init__(
+        self, data_dir: str = "data", tmp_dir: str = "tmp", history_hours: int = 24
+    ) -> None:
+        self._max_age = timedelta(hours=history_hours)
         self._data_dir = Path(data_dir)
         self._tmp_dir = Path(tmp_dir)
         self._data_dir.mkdir(parents=True, exist_ok=True)
@@ -52,7 +54,7 @@ class ChartService:
             logger.error("無法儲存歷史數據: %s", e)
 
     def _prune_old_entries(self, data: list[dict]) -> list[dict]:
-        cutoff = datetime.now(tz=timezone.utc) - _MAX_AGE
+        cutoff = datetime.now(tz=timezone.utc) - self._max_age
         pruned = []
         for entry in data:
             try:

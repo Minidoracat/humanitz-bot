@@ -49,6 +49,7 @@ class ServerStatusCog(commands.Cog):
         self.chart_service = ChartService(
             data_dir=str(Path("data")),
             tmp_dir=str(Path("tmp")),
+            history_hours=settings.chart_history_hours,
         )
 
         self.status_channel_id: int = settings.status_channel_id
