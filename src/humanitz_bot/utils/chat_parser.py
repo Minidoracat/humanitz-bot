@@ -119,6 +119,24 @@ class ChatDiffer:
         self._last_lines: list[str] = []
         self._initialized: bool = False
 
+    @staticmethod
+    def _diff(old: list[str], new: list[str]) -> list[str]:
+        if not old or not new:
+            return new
+
+        last_old = old[-1]
+        anchor = -1
+        for j in range(len(new) - 1, -1, -1):
+            if new[j] == last_old:
+                anchor = j
+                break
+
+        if anchor >= 0:
+            return new[anchor + 1 :]
+
+        logger.debug("No overlap found, treating all %d lines as new", len(new))
+        return new
+
     def get_new_events(self, raw_chat: str) -> list[ChatEvent]:
         """比較當前 fetchchat 輸出與先前快照
 
@@ -149,28 +167,7 @@ class ChatDiffer:
             logger.debug("Empty chat output received")
             return []
 
-        # 尋找重疊點：從 _last_lines 的末尾開始往前找
-        overlap_index = -1
-        for i in range(len(self._last_lines) - 1, -1, -1):
-            try:
-                overlap_index = current_lines.index(self._last_lines[i])
-                logger.debug(
-                    "Found overlap at index %d: %s", overlap_index, self._last_lines[i]
-                )
-                break
-            except ValueError:
-                continue
-
-        # 計算新行
-        if overlap_index >= 0:
-            # 找到重疊：新行 = overlap_index 之後的所有行
-            new_lines = current_lines[overlap_index + 1 :]
-        else:
-            # 沒有重疊：所有 current_lines 都是新的
-            logger.debug(
-                "No overlap found, treating all %d lines as new", len(current_lines)
-            )
-            new_lines = current_lines
+        new_lines = self._diff(self._last_lines, current_lines)
 
         # 更新快照
         self._last_lines = current_lines
