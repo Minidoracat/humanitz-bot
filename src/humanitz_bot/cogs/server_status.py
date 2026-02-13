@@ -61,6 +61,7 @@ class ServerStatusCog(commands.Cog):
         self.status_message_id: int | None = settings.status_message_id
         self._update_interval: int = settings.status_update_interval
         self._show_system_stats: bool = settings.show_system_stats
+        self._date_format: str = settings.date_format
         self._status_message: discord.Message | None = None
         self._last_result: FetchAllResult | None = None
         self._prune_counter: int = 0
@@ -190,7 +191,7 @@ class ServerStatusCog(commands.Cog):
 
         embed.set_image(url="attachment://player_chart.png")
         embed.set_footer(
-            text=f"{t('status.last_update')}: {now.strftime('%m/%d/%Y, %H:%M:%S')}"
+            text=f"{t('status.last_update')}: {now.strftime(self._date_format)}"
         )
 
         return embed

@@ -41,6 +41,7 @@ class Settings:
     chart_history_hours: int = 24
     locale: str = "en"
     show_system_stats: bool = True
+    date_format: str = "%Y/%m/%d %H:%M:%S"
     db_retention_days: int = 30
     log_level: str = "INFO"
     log_retention_days: int = 7
@@ -114,6 +115,7 @@ class Settings:
             "1",
             "yes",
         )
+        date_format = os.getenv("DATE_FORMAT", "%Y/%m/%d %H:%M:%S").strip()
         db_retention_days_str = os.getenv("DB_RETENTION_DAYS", "30").strip()
         log_level = os.getenv("LOG_LEVEL", "INFO").strip()
         log_retention_days_str = os.getenv("LOG_RETENTION_DAYS", "7").strip()
@@ -151,6 +153,7 @@ class Settings:
             chart_history_hours=chart_history_hours,
             locale=locale,
             show_system_stats=show_system_stats,
+            date_format=date_format,
             db_retention_days=db_retention_days,
             log_level=log_level,
             log_retention_days=log_retention_days,
