@@ -90,7 +90,7 @@ Edit `.env` and fill in your values:
 | `LOCALE` | | `en` or `zh-TW` (default: `en`) |
 | `PLAYER_LOG_PATH` | | Path to `PlayerConnectedLog.txt` |
 
-See [`.env.example`](.env.example) for all options with detailed descriptions.
+See [`.env.example`](.env.example) for all options with detailed descriptions. A [Traditional Chinese version](.env.example.zh-TW) is also available.
 
 ### 4. Run
 

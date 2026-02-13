@@ -90,7 +90,7 @@ cp .env.example .env
 | `LOCALE` | | `en` 或 `zh-TW`（預設：`en`） |
 | `PLAYER_LOG_PATH` | | `PlayerConnectedLog.txt` 檔案路徑 |
 
-完整選項請參考 [`.env.example`](.env.example)。
+完整選項請參考 [`.env.example`](.env.example)，亦提供[繁體中文版](.env.example.zh-TW)。
 
 ### 4. 啟動
 
