@@ -37,7 +37,7 @@ class Settings:
     # 選用設定（含預設值）
     status_message_id: int | None = None  # None = bot 會建立新訊息
     status_update_interval: int = 30
-    chat_poll_interval: int = 10
+    chat_poll_interval: int = 5
     chart_history_hours: int = 24
     log_level: str = "INFO"
     player_log_path: str = (
@@ -108,7 +108,7 @@ class Settings:
         rcon_port_str = os.getenv("RCON_PORT", "8888").strip()
         status_message_id_str = os.getenv("STATUS_MESSAGE_ID", "").strip()
         status_update_interval_str = os.getenv("STATUS_UPDATE_INTERVAL", "30").strip()
-        chat_poll_interval_str = os.getenv("CHAT_POLL_INTERVAL", "10").strip()
+        chat_poll_interval_str = os.getenv("CHAT_POLL_INTERVAL", "5").strip()
         chart_history_hours_str = os.getenv("CHART_HISTORY_HOURS", "24").strip()
         log_level = os.getenv("LOG_LEVEL", "INFO").strip()
         player_log_path = os.getenv(

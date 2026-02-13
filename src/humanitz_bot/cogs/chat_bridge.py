@@ -54,17 +54,8 @@ class ChatBridgeCog(commands.Cog):
     @tasks.loop(seconds=10)
     async def poll_chat(self) -> None:
         try:
-            status_cog = self.bot.get_cog("ServerStatusCog")
-            chat_raw = ""
-
-            if status_cog is not None and hasattr(status_cog, "_last_result"):
-                last_result = status_cog._last_result  # type: ignore[attr-defined]
-                if last_result is not None:
-                    chat_raw = last_result.chat_raw
-
-            if not chat_raw:
-                rcon = self._get_rcon()
-                chat_raw = await rcon.execute("fetchchat")
+            rcon = self._get_rcon()
+            chat_raw = await rcon.execute("fetchchat")
 
             if not chat_raw:
                 return
