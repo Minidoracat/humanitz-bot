@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass, field
 
 from humanitz_bot.rcon_client import RconConnectionError, SourceRCON
+from humanitz_bot.utils.i18n import t
 
 logger = logging.getLogger("humanitz_bot.rcon")
 
@@ -90,15 +91,15 @@ class RconService:
                 pass
             self._client = None
 
-        logger.info("嘗試建立 RCON 連線: %s:%d", self._host, self._port)
+        logger.info(t("log.rcon_connecting"), self._host, self._port)
         connected = await asyncio.to_thread(self._connect_sync)
         if connected:
-            logger.info("RCON 連線已建立")
+            logger.info(t("log.rcon_connected"))
             return True
 
         backoff = self._backoff[min(self._backoff_index, len(self._backoff) - 1)]
         self._backoff_index += 1
-        logger.warning("RCON 連線失敗，下次重試延遲 %ds", backoff)
+        logger.warning(t("log.rcon_reconnect_backoff"), backoff)
         return False
 
     async def execute(self, command: str, read_timeout: float = 3.5) -> str:
@@ -117,7 +118,7 @@ class RconService:
                 )
                 return body
             except (RconConnectionError, OSError) as e:
-                logger.warning("RCON 指令執行失敗 (%s): %s", command, e)
+                logger.warning(t("log.rcon_command_failed"), command, e)
                 self._client = None
                 return ""
 
@@ -128,7 +129,9 @@ class RconService:
         """
         async with self._lock:
             if not await self._ensure_connected():
-                return FetchAllResult(online=False, error="RCON 連線失敗")
+                return FetchAllResult(
+                    online=False, error=t("log.rcon_connection_failed")
+                )
             assert self._client is not None
 
             result = FetchAllResult(online=True)
@@ -149,7 +152,7 @@ class RconService:
                 result.chat_raw = chat_raw
 
             except (RconConnectionError, OSError) as e:
-                logger.warning("fetch_all 執行中斷: %s", e)
+                logger.warning(t("log.rcon_fetch_interrupted"), e)
                 self._client = None
                 result.online = False
                 result.error = str(e)
@@ -244,4 +247,4 @@ class RconService:
             except Exception:
                 pass
             self._client = None
-            logger.info("RconService 連線已關閉")
+            logger.info(t("log.rcon_service_closed"))

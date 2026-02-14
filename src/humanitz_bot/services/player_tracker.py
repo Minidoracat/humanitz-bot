@@ -8,6 +8,8 @@ from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from humanitz_bot.utils.i18n import t
+
 logger = logging.getLogger("humanitz_bot.services.player_tracker")
 
 # 匹配格式: Player Connected NAME NetID(STEAMID_+_|EOSID) (DD/MM/Y,YYY HH:MM)
@@ -38,7 +40,7 @@ class PlayerTracker:
             若在日誌尾端找不到該玩家的記錄則不包含。
         """
         if not self._log_path.exists():
-            logger.warning("日誌檔案不存在: %s", self._log_path)
+            logger.warning(t("log.player_log_not_found"), self._log_path)
             return {}
 
         if not online_names:
@@ -48,7 +50,7 @@ class PlayerTracker:
             with open(self._log_path, encoding="utf-8", errors="replace") as f:
                 tail_lines = list(deque(f, maxlen=_TAIL_LINES))
         except OSError as e:
-            logger.error("無法讀取日誌: %s", e)
+            logger.error(t("log.player_log_read_error"), e)
             return {}
 
         remaining = set(online_names)
@@ -77,14 +79,14 @@ class PlayerTracker:
             try:
                 dt = datetime.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M")
             except ValueError:
-                logger.warning("無法解析時間: date=%s time=%s", date_str, time_str)
+                logger.warning(t("log.player_time_parse_error"), date_str, time_str)
                 continue
 
             result[name] = dt
             remaining.discard(name)
 
         if remaining:
-            logger.debug("以下玩家在日誌尾端找不到 Connected 記錄: %s", remaining)
+            logger.debug(t("log.player_not_found_in_log"), remaining)
 
         return result
 

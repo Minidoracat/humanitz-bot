@@ -15,6 +15,8 @@ import logging
 import socket
 import struct
 
+from humanitz_bot.utils.i18n import t
+
 logger = logging.getLogger("humanitz_bot.rcon_client")
 
 # Source RCON 封包類型 (Valve Developer Wiki)
@@ -93,12 +95,12 @@ class SourceRCON:
     def _recv_exact(self, n: int) -> bytes:
         """精確讀取 n bytes，確保完整接收。"""
         if self._sock is None:
-            raise RconConnectionError("未建立連線")
+            raise RconConnectionError(t("error.rcon_not_connected"))
         data = b""
         while len(data) < n:
             chunk = self._sock.recv(n - len(data))
             if not chunk:
-                raise RconConnectionError("連線已關閉")
+                raise RconConnectionError(t("error.rcon_connection_closed"))
             data += chunk
         return data
 
@@ -133,10 +135,10 @@ class SourceRCON:
         self._sock.settimeout(self.timeout)
         try:
             self._sock.connect((self.host, self.port))
-            logger.info("RCON TCP 連線成功: %s:%d", self.host, self.port)
+            logger.info(t("log.rcon_tcp_connected"), self.host, self.port)
             return True
         except (socket.timeout, ConnectionRefusedError, OSError) as e:
-            logger.error("RCON 連線失敗: %s:%d - %s", self.host, self.port, e)
+            logger.error(t("log.rcon_connect_failed"), self.host, self.port, e)
             self._sock = None
             return False
 
@@ -157,12 +159,12 @@ class SourceRCON:
             True 認證成功，False 認證失敗。
         """
         if self._sock is None:
-            raise RconConnectionError("未建立連線，請先呼叫 connect()")
+            raise RconConnectionError(t("error.rcon_not_connected_call_connect"))
 
         req_id = self._next_id()
         packet = self._build_packet(req_id, SERVERDATA_AUTH, password)
         self._sock.sendall(packet)
-        logger.debug("送出 AUTH 封包, id=%d", req_id)
+        logger.debug(t("log.rcon_auth_packet_sent"), req_id)
 
         for i in range(3):
             try:
@@ -177,20 +179,20 @@ class SourceRCON:
                 )
                 if resp_type == SERVERDATA_AUTH_RESPONSE:
                     if resp_id == req_id:
-                        logger.info("RCON 認證成功")
+                        logger.info(t("log.rcon_auth_success"))
                         return True
                     # HumanitZ 回傳 id=0，但 AUTH_RESPONSE type=2 仍代表成功
                     # 只要收到 AUTH_RESPONSE 且非 -1 就算成功
                     if resp_id != -1:
-                        logger.info("RCON 認證成功 (resp_id=%d)", resp_id)
+                        logger.info(t("log.rcon_auth_success_id"), resp_id)
                         return True
-                    logger.warning("RCON 認證失敗: resp_id=%d", resp_id)
+                    logger.warning(t("log.rcon_auth_failed"), resp_id)
                     return False
             except socket.timeout:
-                logger.debug("AUTH 讀取 #%d 超時", i + 1)
+                logger.debug(t("log.rcon_auth_read_timeout"), i + 1)
                 break
 
-        logger.error("RCON 認證失敗: 未收到 AUTH_RESPONSE")
+        logger.error(t("log.rcon_auth_no_response"))
         return False
 
     def execute_simple(
@@ -209,11 +211,11 @@ class SourceRCON:
             (combined_body, packet_debug_info) — 合併回應文字與封包偵錯資訊。
         """
         if self._sock is None:
-            raise RconConnectionError("未建立連線")
+            raise RconConnectionError(t("error.rcon_not_connected"))
 
         cmd_id = self._next_id()
         self._sock.sendall(self._build_packet(cmd_id, SERVERDATA_EXECCOMMAND, command))
-        logger.debug("送出指令: %r (id=%d)", command, cmd_id)
+        logger.debug(t("log.rcon_command_sent"), command, cmd_id)
 
         old_timeout = self._sock.gettimeout()
         self._sock.settimeout(read_timeout)
@@ -238,13 +240,13 @@ class SourceRCON:
             pass
         except Exception as e:
             packets.append({"error": str(e)})
-            logger.warning("讀取回應時發生錯誤: %s", e)
+            logger.warning(t("log.rcon_read_error"), e)
         finally:
             self._sock.settimeout(old_timeout)
 
         combined = "".join(body_parts)
         logger.debug(
-            "指令 %r: 收到 %d 個封包, 回應長度=%d",
+            t("log.rcon_command_result"),
             command,
             len(packets),
             len(combined),
@@ -259,4 +261,4 @@ class SourceRCON:
             except Exception:
                 pass
             self._sock = None
-            logger.info("RCON 連線已關閉")
+            logger.info(t("log.rcon_connection_closed"))

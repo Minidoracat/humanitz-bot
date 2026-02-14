@@ -78,7 +78,7 @@ class ChartService:
 
             return str(output_path)
         except Exception:
-            logger.exception("生成圖表失敗")
+            logger.exception(t("log.chart_generation_failed"))
             return None
         finally:
             plt.close("all")
