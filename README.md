@@ -90,6 +90,8 @@ Edit `.env` and fill in your values:
 | `SHOW_SYSTEM_STATS` | | Show host system stats in embed (default: `true`; set `false` for remote setups) |
 | `LOCALE` | | `en` or `zh-TW` (default: `en`) |
 | `PLAYER_LOG_PATH` | | Path to `PlayerConnectedLog.txt` |
+| `STARBASE_ID` | | Bisect Starbase server ID from panel URL (e.g., https://games.bisecthosting.com/server/bae934e0 → `bae934e0`) |
+| `STARBASE_TOKEN` | | Bisect Starbase API token (Panel → My Account → Account Settings → API Credentials) |
 
 See [`.env.example`](.env.example) for all options with detailed descriptions. A [Traditional Chinese version](.env.example.zh-TW) is also available.
 

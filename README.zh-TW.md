@@ -90,6 +90,8 @@ cp .env.example .env
 | `SHOW_SYSTEM_STATS` | | 顯示主機系統資源（預設：`true`；遠端架設建議設為 `false`） |
 | `LOCALE` | | `en` 或 `zh-TW`（預設：`en`） |
 | `PLAYER_LOG_PATH` | | `PlayerConnectedLog.txt` 檔案路徑 |
+| `STARBASE_ID` | | Bisect Starbase 面板網址中的伺服器 ID（例如：https://games.bisecthosting.com/server/bae934e0 → `bae934e0`） |
+| `STARBASE_TOKEN` | | Bisect Starbase API Token（面板 → My Account → Account Settings → API Credentials） |
 
 完整選項請參考 [`.env.example`](.env.example)，亦提供[繁體中文版](.env.example.zh-TW)。
 
