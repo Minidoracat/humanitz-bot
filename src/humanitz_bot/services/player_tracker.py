@@ -7,6 +7,9 @@ import re
 from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Callable, Awaitable, Optional
+
+import requests
 
 from humanitz_bot.utils.i18n import t
 
@@ -21,42 +24,61 @@ _TAIL_LINES = 200
 
 
 class PlayerTracker:
-    """解析 PlayerConnectedLog.txt，取得指定玩家的最近連線時間。"""
+    """解析 PlayerConnectedLog.txt，取得指定玩家的最近連線時間。
+    若提供 Starbase 資訊，將改為透過 Bisect API 抓取檔案內容（每次完整抓取，非 tail）。
+    """
 
-    def __init__(self, log_path: str) -> None:
+    def __init__(
+        self,
+        log_path: str,
+        starbase_fetcher: Optional[Callable[[], str]] = None,
+    ) -> None:
         self._log_path = Path(log_path)
+        self._starbase_fetcher = starbase_fetcher  # 若存在則使用遠端檔案來源
 
-    def get_online_times(self, online_names: list[str]) -> dict[str, datetime]:
-        """取得指定在線玩家的最近 Connected 時間。
-
-        僅讀取日誌尾端約 200 行以提升效能。
-        從最後一行往前搜尋，找到每位玩家最近一次 Connected 記錄。
-
-        Args:
-            online_names: 目前在線的玩家名稱列表。
-
-        Returns:
-            dict，key 為玩家名稱，value 為連線時間 datetime。
-            若在日誌尾端找不到該玩家的記錄則不包含。
-        """
+    def _read_local_tail(self) -> list[str]:
         if not self._log_path.exists():
             logger.warning(t("log.player_log_not_found"), self._log_path)
-            return {}
+            return []
+        try:
+            with open(self._log_path, encoding="utf-8", errors="replace") as f:
+                return list(deque(f, maxlen=_TAIL_LINES))
+        except OSError as e:
+            logger.error(t("log.player_log_read_error"), e)
+            return []
 
+    def _read_remote_full(self) -> list[str]:
+        """遠端抓取完整檔案內容（Starbase），並回傳行列表。"""
+        try:
+            raw = self._starbase_fetcher() if self._starbase_fetcher else ""
+        except Exception as e:
+            logger.error("Failed to fetch remote PlayerConnectedLog via Starbase: %s", e)
+            return []
+        if not raw:
+            return []
+        # 直接解析全檔內容，不做 tail（避免遺漏）
+        normalized = raw.replace("\r\n", "\n").replace("\r", "\n")
+        return [line for line in normalized.split("\n") if line]
+
+    def get_online_times(self, online_names: list[str]) -> dict[str, datetime]:
+        """取得指定在線玩家的最近 Connected 時間。"""
         if not online_names:
             return {}
 
-        try:
-            with open(self._log_path, encoding="utf-8", errors="replace") as f:
-                tail_lines = list(deque(f, maxlen=_TAIL_LINES))
-        except OSError as e:
-            logger.error(t("log.player_log_read_error"), e)
+        # 來源選擇：Starbase 遠端 > 本地檔案 tail
+        if self._starbase_fetcher:
+            lines = self._read_remote_full()
+        else:
+            lines = self._read_local_tail()
+
+        if not lines:
             return {}
 
         remaining = set(online_names)
         result: dict[str, datetime] = {}
 
-        for line in reversed(tail_lines):
+        # 從最後往前找最近一次 Connected
+        for line in reversed(lines):
             if not remaining:
                 break
 
@@ -72,7 +94,6 @@ class PlayerTracker:
             if name not in remaining:
                 continue
 
-            # 解析日期 — 年份有逗號: 2,026 → 2026
             date_str = m.group(2).replace(",", "")
             time_str = m.group(3)
 
