@@ -46,7 +46,26 @@ class ServerStatusCog(commands.Cog):
         self.rcon = RconService(
             settings.rcon_host, settings.rcon_port, settings.rcon_password
         )
-        self.player_tracker = PlayerTracker(settings.player_log_path)
+
+        # 若設有 STARBASE_TOKEN/STARBASE_ID，建立遠端檔案抓取器交給 PlayerTracker
+        starbase_fetcher = None
+        if getattr(settings, "starbase_token", None) and getattr(settings, "starbase_id", None):
+            token = settings.starbase_token
+            server_id = settings.starbase_id
+
+            def _fetch_remote_log() -> str:
+                url = f"https://games.bisecthosting.com/api/client/servers/{server_id}/files/contents"
+                headers = {"Authorization": f"Bearer {token}"}
+                params = {"file": "HumanitZServer/PlayerConnectedLog.txt"}
+                import requests
+
+                resp = requests.post(url, headers=headers, params=params, timeout=15)
+                resp.raise_for_status()
+                return resp.text
+
+            starbase_fetcher = _fetch_remote_log
+
+        self.player_tracker = PlayerTracker(settings.player_log_path, starbase_fetcher)
         self.db = Database(
             data_dir="data",
             retention_days=settings.db_retention_days,
@@ -66,6 +85,12 @@ class ServerStatusCog(commands.Cog):
         self._status_message: discord.Message | None = None
         self._last_result: FetchAllResult | None = None
         self._prune_counter: int = 0
+
+        # 啟用 Starbase /resources 模式旗標
+        self._use_starbase_stats: bool = bool(
+            getattr(settings, "starbase_token", None) and getattr(settings, "starbase_id", None)
+        )
+
         self._load_state()
 
     @commands.Cog.listener()
@@ -73,9 +98,7 @@ class ServerStatusCog(commands.Cog):
         if not self.update_status.is_running():
             self.update_status.change_interval(seconds=self._update_interval)
             self.update_status.start()
-            logger.info(
-                "Status update loop started (interval=%ds)", self._update_interval
-            )
+            logger.info("Status update loop started (interval=%ds)", self._update_interval)
 
     async def cog_unload(self) -> None:
         self.update_status.cancel()
@@ -90,6 +113,7 @@ class ServerStatusCog(commands.Cog):
             if result.server_info:
                 result.server_info.max_players = self._max_players
 
+            # 以 RCON 列表為準，從 PlayerConnectedLog 計算上線時長
             online_times: dict[str, datetime] = {}
             if result.server_info and result.server_info.player_names:
                 online_times = await asyncio.to_thread(
@@ -97,17 +121,23 @@ class ServerStatusCog(commands.Cog):
                     result.server_info.player_names,
                 )
 
-            stats = (
-                await asyncio.to_thread(get_system_stats)
-                if self._show_system_stats
-                else None
-            )
+            # 系統資源：若啟用 Starbase 則改用 /resources，否則使用 psutil
+            starbase_stats: dict | None = None
+            stats: SystemStats | None = None
+            if self._show_system_stats:
+                if self._use_starbase_stats:
+                    try:
+                        starbase_stats = await asyncio.to_thread(self._fetch_starbase_resources)
+                    except Exception:
+                        starbase_stats = None
+                else:
+                    stats = await asyncio.to_thread(get_system_stats)
 
             player_count = result.server_info.player_count if result.server_info else 0
             await asyncio.to_thread(self.chart_service.add_data_point, player_count)
             chart_path = await asyncio.to_thread(self.chart_service.generate_chart)
 
-            embed = self._build_embed(result, online_times, stats)
+            embed = self._build_embed(result, online_times, stats, starbase_stats)
 
             await self._update_message(embed, chart_path)
 
@@ -129,6 +159,7 @@ class ServerStatusCog(commands.Cog):
         result: FetchAllResult,
         online_times: dict[str, datetime],
         stats: SystemStats | None,
+        starbase_stats: dict | None = None,
     ) -> discord.Embed:
         now = datetime.now()
 
@@ -186,12 +217,20 @@ class ServerStatusCog(commands.Cog):
                 color=_COLOR_OFFLINE,
             )
 
-        if stats is not None:
-            embed.add_field(
-                name=t("status.system_status"),
-                value=self._format_system_stats(stats),
-                inline=False,
-            )
+        # 系統資源顯示：Starbase 優先，且僅顯示 /resources 提供之欄位
+        if self._show_system_stats:
+            if starbase_stats is not None:
+                embed.add_field(
+                    name=t("status.system_status"),
+                    value=self._format_starbase_resources(starbase_stats),
+                    inline=False,
+                )
+            elif stats is not None:
+                embed.add_field(
+                    name=t("status.system_status"),
+                    value=self._format_system_stats(stats),
+                    inline=False,
+                )
 
         embed.set_image(url="attachment://player_chart.png")
         embed.set_footer(
@@ -245,6 +284,43 @@ class ServerStatusCog(commands.Cog):
             f"⏰ {t('status.uptime')}: {uptime}"
         )
 
+    def _format_starbase_resources(self, data: dict) -> str:
+        """以 Bisect /resources 取代 psutil 顯示（僅顯示該 API 有的欄位）。"""
+        try:
+            res = data.get("attributes", {}).get("resources", {})
+            cpu = float(res.get("cpu_absolute", 0.0))
+            mem_bytes = int(res.get("memory_bytes", 0))
+            disk_bytes = int(res.get("disk_bytes", 0))
+            rx = float(res.get("network_rx_bytes", 0.0))
+            tx = float(res.get("network_tx_bytes", 0.0))
+        except Exception:
+            return "N/A"
+
+        mem_str = f"{mem_bytes/1024/1024/1024:.2f} GB"
+        disk_str = f"{disk_bytes/1024/1024/1024:.2f} GB"
+        net_recv = format_bytes(rx)
+        net_sent = format_bytes(tx)
+
+        cpu_bar = make_progress_bar(cpu)
+        return (
+            f"💻 {t('status.cpu')}: {cpu_bar} {cpu:.1f}%\n"
+            f"🧠 {t('status.memory')}: {mem_str}\n"
+            f"💾 {t('status.disk')}: {disk_str}\n"
+            f"🌐 {t('status.network')}: ↓{net_recv} ↑{net_sent}"
+        )
+
+    def _fetch_starbase_resources(self) -> dict:
+        """呼叫 Bisect /resources API 取得即時資源。"""
+        settings = self.bot.settings  # type: ignore[attr-defined]
+        assert settings.starbase_token and settings.starbase_id
+        url = f"https://games.bisecthosting.com/api/client/servers/{settings.starbase_id}/resources"
+        headers = {"Authorization": f"Bearer {settings.starbase_token}"}
+        import requests
+
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        return resp.json()
+
     def _load_state(self) -> None:
         """從 data/status_state.json 載入持久化的 message ID。"""
         if self.status_message_id is not None:
@@ -258,9 +334,7 @@ class ServerStatusCog(commands.Cog):
                 saved_msg = data.get("message_id")
                 if saved_channel == self.status_channel_id and saved_msg:
                     self.status_message_id = int(saved_msg)
-                    logger.info(
-                        "Loaded saved status message ID: %d", self.status_message_id
-                    )
+                    logger.info("Loaded saved status message ID: %d", self.status_message_id)
         except Exception:
             logger.warning("Failed to load status state, will create new message")
 
@@ -269,18 +343,14 @@ class ServerStatusCog(commands.Cog):
         try:
             _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
             _STATE_FILE.write_text(
-                json.dumps(
-                    {"channel_id": self.status_channel_id, "message_id": message_id}
-                ),
+                json.dumps({"channel_id": self.status_channel_id, "message_id": message_id}),
                 encoding="utf-8",
             )
             logger.debug("Saved status message ID: %d", message_id)
         except Exception:
             logger.warning("Failed to save status state")
 
-    async def _update_message(
-        self, embed: discord.Embed, chart_path: str | None
-    ) -> None:
+    async def _update_message(self, embed: discord.Embed, chart_path: str | None) -> None:
         raw_channel = self.bot.get_channel(self.status_channel_id)
         if not isinstance(raw_channel, discord.TextChannel):
             logger.error(
@@ -290,11 +360,7 @@ class ServerStatusCog(commands.Cog):
             return
         channel: discord.TextChannel = raw_channel
 
-        file = (
-            discord.File(chart_path, filename="player_chart.png")
-            if chart_path
-            else None
-        )
+        file = discord.File(chart_path, filename="player_chart.png") if chart_path else None
 
         if self._status_message is not None:
             try:
@@ -308,9 +374,7 @@ class ServerStatusCog(commands.Cog):
 
         if self.status_message_id:
             try:
-                self._status_message = await channel.fetch_message(
-                    self.status_message_id
-                )
+                self._status_message = await channel.fetch_message(self.status_message_id)
                 if file:
                     await self._status_message.edit(embed=embed, attachments=[file])
                 else:
