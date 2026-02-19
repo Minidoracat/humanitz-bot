@@ -5,9 +5,7 @@ from __future__ import annotations
 import os
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 from dotenv import load_dotenv
-
 logger = logging.getLogger("humanitz_bot.config")
 
 _PLACEHOLDER_PATTERNS = ("YOUR_", "PLACEHOLDER", "CHANGEME", "TODO", "REPLACE")
@@ -47,6 +45,10 @@ class Settings:
     log_level: str = "INFO"
     log_retention_days: int = 7
     player_log_path: str = "PlayerConnectedLog.txt"
+
+    # Starbase (optional)
+    starbase_token: str | None = None
+    starbase_id: str | None = None
 
     @classmethod
     def from_env(cls, env_path: str | None = None) -> Settings:
@@ -126,6 +128,10 @@ class Settings:
             "PlayerConnectedLog.txt",
         ).strip()
 
+        # Optional Starbase credentials for Remote functionality
+        starbase_token = os.getenv("STARBASE_TOKEN", "").strip() or None
+        starbase_id = os.getenv("STARBASE_ID", "").strip() or None
+
         # 類型轉換
         try:
             rcon_port = int(rcon_port_str)
@@ -162,4 +168,6 @@ class Settings:
             log_level=log_level,
             log_retention_days=log_retention_days,
             player_log_path=player_log_path,
+            starbase_token=starbase_token,
+            starbase_id=starbase_id,
         )
