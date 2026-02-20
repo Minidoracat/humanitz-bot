@@ -44,6 +44,8 @@ class Settings:
     show_system_stats: bool = True
     show_connect_info: bool = False
     server_connect_info: str = ""
+    show_death_count: bool = True
+    death_count_hours: int = 24
     date_format: str = "%Y/%m/%d %H:%M:%S"
     db_retention_days: int = 30
     log_level: str = "INFO"
@@ -125,6 +127,12 @@ class Settings:
             "yes",
         )
         server_connect_info = os.getenv("SERVER_CONNECT_INFO", "").strip()
+        show_death_count = os.getenv("SHOW_DEATH_COUNT", "true").strip().lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        death_count_hours_str = os.getenv("DEATH_COUNT_HOURS", "24").strip()
         date_format = os.getenv("DATE_FORMAT", "%Y/%m/%d %H:%M:%S").strip()
         db_retention_days_str = os.getenv("DB_RETENTION_DAYS", "30").strip()
         log_level = os.getenv("LOG_LEVEL", "INFO").strip()
@@ -146,6 +154,7 @@ class Settings:
             chat_poll_interval = int(chat_poll_interval_str)
             chart_history_hours = int(chart_history_hours_str)
             max_players = int(max_players_str)
+            death_count_hours = int(death_count_hours_str)
             db_retention_days = int(db_retention_days_str)
             log_retention_days = int(log_retention_days_str)
         except ValueError as e:
@@ -167,6 +176,8 @@ class Settings:
             show_system_stats=show_system_stats,
             show_connect_info=show_connect_info,
             server_connect_info=server_connect_info,
+            show_death_count=show_death_count,
+            death_count_hours=death_count_hours,
             date_format=date_format,
             db_retention_days=db_retention_days,
             log_level=log_level,

@@ -10,7 +10,7 @@
 
 ## 功能特色
 
-- **📊 即時伺服器狀態 Embed** — 自動更新的 Discord 訊息，顯示伺服器名稱、玩家人數、季節/天氣、AI 狀態（殭屍、盜賊、動物）、遊戲時間、FPS、系統資源（CPU/記憶體/磁碟/網路）
+- **📊 即時伺服器狀態 Embed** — 自動更新的 Discord 訊息，顯示伺服器名稱、玩家人數、季節/天氣、AI 狀態（殭屍、盜賊、動物）、死亡統計（可自訂時間範圍）、遊戲時間、FPS、系統資源（CPU/記憶體/磁碟/網路）
 - **💬 雙向聊天橋接** — 即時轉發遊戲內聊天與 Discord 頻道訊息，內建回聲防止與 @mention 消毒
 - **📈 玩家人數圖表** — 24 小時（可設定）歷史圖表，Discord 深色主題風格
 - **👥 玩家在線時長** — 從伺服器日誌解析每位玩家的連線時長
@@ -88,6 +88,10 @@ cp .env.example .env
 | `STATUS_MESSAGE_ID` | | 固定狀態 Embed 到指定訊息（留空則自動建立） |
 | `MAX_PLAYERS` | | 伺服器最大玩家人數，對應 `GameServerSettings.ini`（預設：`50`） |
 | `SHOW_SYSTEM_STATS` | | 顯示主機系統資源（預設：`true`；遠端架設建議設為 `false`） |
+| `SHOW_CONNECT_INFO` | | 是否在狀態 Embed 中顯示伺服器連線資訊（預設：`false`） |
+| `SERVER_CONNECT_INFO` | | 伺服器公開連線位址（玩家直連用，格式：`IP:Port`） |
+| `SHOW_DEATH_COUNT` | | 是否顯示玩家死亡次數（預設：`true`） |
+| `DEATH_COUNT_HOURS` | | 死亡統計的時間範圍，單位小時（預設：`24`） |
 | `LOCALE` | | `en` 或 `zh-TW`（預設：`en`） |
 | `PLAYER_LOG_PATH` | | `PlayerConnectedLog.txt` 檔案路徑 |
 

@@ -64,6 +64,8 @@ class ServerStatusCog(commands.Cog):
         self._show_system_stats: bool = settings.show_system_stats
         self._show_connect_info: bool = settings.show_connect_info
         self._server_connect_info: str = settings.server_connect_info
+        self._show_death_count: bool = settings.show_death_count
+        self._death_count_hours: int = settings.death_count_hours
         self._date_format: str = settings.date_format
         self._status_message: discord.Message | None = None
         self._last_result: FetchAllResult | None = None
@@ -109,7 +111,13 @@ class ServerStatusCog(commands.Cog):
             await asyncio.to_thread(self.chart_service.add_data_point, player_count)
             chart_path = await asyncio.to_thread(self.chart_service.generate_chart)
 
-            embed = self._build_embed(result, online_times, stats)
+            death_count: int | None = None
+            if self._show_death_count:
+                death_count = await asyncio.to_thread(
+                    self.db.get_death_count, self._death_count_hours
+                )
+
+            embed = self._build_embed(result, online_times, stats, death_count)
 
             await self._update_message(embed, chart_path)
 
@@ -131,6 +139,7 @@ class ServerStatusCog(commands.Cog):
         result: FetchAllResult,
         online_times: dict[str, datetime],
         stats: SystemStats | None,
+        death_count: int | None = None,
     ) -> discord.Embed:
         now = datetime.now()
 
@@ -188,6 +197,16 @@ class ServerStatusCog(commands.Cog):
                 ),
                 inline=False,
             )
+
+            if death_count is not None:
+                embed.add_field(
+                    name=t(
+                        "status.death_count",
+                        hours=self._death_count_hours,
+                    ),
+                    value=t("status.death_count_value", count=death_count),
+                    inline=False,
+                )
         else:
             embed = discord.Embed(
                 title="HumanitZ Server",

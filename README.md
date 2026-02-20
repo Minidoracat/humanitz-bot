@@ -10,7 +10,7 @@ A Discord bot for [HumanitZ](https://store.steampowered.com/app/1935610/HumanitZ
 
 ## Features
 
-- **📊 Live Server Status Embed** — Auto-updating Discord message showing server name, player count, season/weather, AI stats (zombies, bandits, animals), game time, FPS, and system resources (CPU/RAM/disk/network)
+- **📊 Live Server Status Embed** — Auto-updating Discord message showing server name, player count, season/weather, AI stats (zombies, bandits, animals), death count (configurable time window), game time, FPS, and system resources (CPU/RAM/disk/network)
 - **💬 Bidirectional Chat Bridge** — Relay messages between in-game chat and a Discord channel in real time, with echo prevention and @mention sanitization
 - **📈 Player Count Chart** — 24-hour (configurable) history chart with Discord-themed dark styling
 - **👥 Player Online Duration** — Shows how long each player has been connected, parsed from server logs
@@ -88,6 +88,10 @@ Edit `.env` and fill in your values:
 | `STATUS_MESSAGE_ID` | | Pin the status embed to a specific message (leave blank to auto-create) |
 | `MAX_PLAYERS` | | Max player count from `GameServerSettings.ini` (default: `50`) |
 | `SHOW_SYSTEM_STATS` | | Show host system stats in embed (default: `true`; set `false` for remote setups) |
+| `SHOW_CONNECT_INFO` | | Show server IP:Port in the status embed (default: `false`) |
+| `SERVER_CONNECT_INFO` | | Public server address for direct connect (format: `IP:Port`) |
+| `SHOW_DEATH_COUNT` | | Show player death count in embed (default: `true`) |
+| `DEATH_COUNT_HOURS` | | Time window in hours for death count (default: `24`) |
 | `LOCALE` | | `en` or `zh-TW` (default: `en`) |
 | `PLAYER_LOG_PATH` | | Path to `PlayerConnectedLog.txt` |
 

@@ -118,6 +118,20 @@ class Database:
             finally:
                 conn.close()
 
+    def get_death_count(self, hours: int = 24) -> int:
+        cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
+        with self._lock:
+            conn = self._get_conn()
+            try:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS cnt FROM player_sessions "
+                    "WHERE event_type = 'player_died' AND timestamp >= ?",
+                    (cutoff,),
+                ).fetchone()
+                return row["cnt"] if row else 0
+            finally:
+                conn.close()
+
     def prune_old_data(self) -> int:
         cutoff = (datetime.now() - self._retention).isoformat()
         total = 0
