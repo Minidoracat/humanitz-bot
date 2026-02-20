@@ -62,6 +62,8 @@ class ServerStatusCog(commands.Cog):
         self._update_interval: int = settings.status_update_interval
         self._max_players: int = settings.max_players
         self._show_system_stats: bool = settings.show_system_stats
+        self._show_connect_info: bool = settings.show_connect_info
+        self._server_connect_info: str = settings.server_connect_info
         self._date_format: str = settings.date_format
         self._status_message: discord.Message | None = None
         self._last_result: FetchAllResult | None = None
@@ -153,6 +155,13 @@ class ServerStatusCog(commands.Cog):
                 ),
                 inline=False,
             )
+
+            if self._show_connect_info and self._server_connect_info:
+                embed.add_field(
+                    name=t("status.connect_info"),
+                    value=f"`{self._server_connect_info}`",
+                    inline=False,
+                )
 
             embed.add_field(
                 name=t("status.players"),

@@ -42,6 +42,8 @@ class Settings:
     locale: str = "en"
     max_players: int = 50
     show_system_stats: bool = True
+    show_connect_info: bool = False
+    server_connect_info: str = ""
     date_format: str = "%Y/%m/%d %H:%M:%S"
     db_retention_days: int = 30
     log_level: str = "INFO"
@@ -117,6 +119,12 @@ class Settings:
             "1",
             "yes",
         )
+        show_connect_info = os.getenv("SHOW_CONNECT_INFO", "false").strip().lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        server_connect_info = os.getenv("SERVER_CONNECT_INFO", "").strip()
         date_format = os.getenv("DATE_FORMAT", "%Y/%m/%d %H:%M:%S").strip()
         db_retention_days_str = os.getenv("DB_RETENTION_DAYS", "30").strip()
         log_level = os.getenv("LOG_LEVEL", "INFO").strip()
@@ -157,6 +165,8 @@ class Settings:
             locale=locale,
             max_players=max_players,
             show_system_stats=show_system_stats,
+            show_connect_info=show_connect_info,
+            server_connect_info=server_connect_info,
             date_format=date_format,
             db_retention_days=db_retention_days,
             log_level=log_level,
