@@ -81,4 +81,4 @@ class ChartService:
             logger.exception(t("log.chart_generation_failed"))
             return None
         finally:
-            plt.close("all")
+            plt.close(fig)

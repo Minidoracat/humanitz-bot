@@ -31,6 +31,8 @@ class ChatEvent:
 
 # 編譯正則表達式 patterns
 _CHAT_RE = re.compile(r"^<PN>(.+?):</>(.+)$")
+# 管理員玩家聊天: <SP>[Admin]</><PN>PlayerName:</>Message
+_ADMIN_CHAT_RE = re.compile(r"^<SP>\[Admin\]</><PN>(.+?):</>(.+)$")
 _JOIN_RE = re.compile(r"^Player Joined \(<PN>(.+?)</>\)$")
 _LEFT_RE = re.compile(r"^Player Left \(<PN>(.+?)</>\)$")
 _DIED_RE = re.compile(r"^Player died \(<PN>(.+?)</>\)$")
@@ -53,8 +55,9 @@ def parse_chat_line(line: str) -> ChatEvent:
         >>> parse_chat_line("Player Joined (<PN>OG83</>)")
         ChatEvent(event_type=ChatEventType.PLAYER_JOINED, player_name='OG83', message='', raw_line='...')
     """
-    # 玩家聊天: <PN>PlayerName:</>MessageText
-    m = _CHAT_RE.match(line)
+    # 管理員玩家聊天: <SP>[Admin]</><PN>PlayerName:</>MessageText
+    # 必須在普通玩家聊天之前檢查，因為普通 regex 無法匹配此格式
+    m = _ADMIN_CHAT_RE.match(line)
     if m:
         return ChatEvent(
             event_type=ChatEventType.PLAYER_CHAT,
@@ -63,6 +66,15 @@ def parse_chat_line(line: str) -> ChatEvent:
             raw_line=line,
         )
 
+    # 普通玩家聊天: <PN>PlayerName:</>MessageText
+    m = _CHAT_RE.match(line)
+    if m:
+        return ChatEvent(
+            event_type=ChatEventType.PLAYER_CHAT,
+            player_name=m.group(1),
+            message=m.group(2),
+            raw_line=line,
+        )
     # 玩家加入: Player Joined (<PN>PlayerName</>)
     m = _JOIN_RE.match(line)
     if m:
@@ -115,24 +127,35 @@ def parse_chat_line(line: str) -> ChatEvent:
 class ChatDiffer:
     """追蹤 fetchchat 快照並返回新事件"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._last_lines: list[str] = []
         self._initialized: bool = False
 
     @staticmethod
     def _diff(old: list[str], new: list[str]) -> list[str]:
+        """找出新快照相較於舊快照的新增行。
+
+        在新快照中從尾端搜尋舊快照最後一行的位置，
+        並透過比對前面連續行來驗證錨點，正確處理重複內容。
+        """
         if not old or not new:
             return new
 
         last_old = old[-1]
-        anchor = -1
         for j in range(len(new) - 1, -1, -1):
-            if new[j] == last_old:
-                anchor = j
-                break
-
-        if anchor >= 0:
-            return new[anchor + 1 :]
+            if new[j] != last_old:
+                continue
+            # Verify preceding lines match to avoid false anchor on duplicates
+            verified = True
+            for k in range(1, len(old)):
+                new_idx = j - k
+                if new_idx < 0:
+                    break
+                if old[len(old) - 1 - k] != new[new_idx]:
+                    verified = False
+                    break
+            if verified:
+                return new[j + 1 :]
 
         logger.debug("No overlap found, treating all %d lines as new", len(new))
         return new

@@ -14,6 +14,11 @@ from discord.ext import commands, tasks
 from humanitz_bot.services.chart_service import ChartService
 from humanitz_bot.services.database import Database
 from humanitz_bot.services.player_tracker import PlayerTracker
+from humanitz_bot.services.player_identity import (
+    PlayerIdentityInfo,
+    PlayerIdentityService,
+)
+from humanitz_bot.services.save_service import SaveService
 from humanitz_bot.services.player_tracker import (
     format_duration as format_player_duration,
 )
@@ -57,6 +62,14 @@ class ServerStatusCog(commands.Cog):
             history_hours=settings.chart_history_hours,
         )
 
+        # 存檔解析與玩家身份服務
+        self.identity_service = PlayerIdentityService(self.db)
+        self.save_service = SaveService(
+            db=self.db,
+            save_file_path=settings.save_file_path,
+            save_json_path=settings.save_json_path,
+        )
+
         self.status_channel_id: int = settings.status_channel_id
         self.status_message_id: int | None = settings.status_message_id
         self._update_interval: int = settings.status_update_interval
@@ -70,7 +83,20 @@ class ServerStatusCog(commands.Cog):
         self._status_message: discord.Message | None = None
         self._last_result: FetchAllResult | None = None
         self._prune_counter: int = 0
+        self._save_parse_interval: int = settings.save_parse_interval
+        self._save_parse_counter: int = 0
+        self._background_tasks: set[asyncio.Task[None]] = set()
+        self._identity_loaded: bool = False
         self._load_state()
+        self._player_log_path: str = settings.player_log_path
+        # PlayerIDMapped.txt 與 PlayerConnectedLog.txt 在同一目錄（LGSM 標準）
+        mapped_path = Path(settings.player_log_path).parent / "PlayerIDMapped.txt"
+        self._player_id_mapped_path: str = str(mapped_path)
+        if not mapped_path.exists():
+            logger.warning(
+                "PlayerIDMapped.txt not found at %s — player name resolution may be limited",
+                mapped_path,
+            )
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
@@ -81,7 +107,33 @@ class ServerStatusCog(commands.Cog):
                 "Status update loop started (interval=%ds)", self._update_interval
             )
 
+        # 啟動時匯入玩家身份（僅首次連線，重連時跳過）
+        if not self._identity_loaded:
+            await asyncio.to_thread(
+                self.identity_service.import_from_mapped_file,
+                self._player_id_mapped_path,
+            )
+            await asyncio.to_thread(
+                self.identity_service.import_from_connected_log,
+                self._player_log_path,
+            )
+            self._identity_loaded = True
+
+            # 啟動時立即觸發首次存檔解析
+            if self.save_service.is_available and not self.save_service.is_parsing:
+                self._spawn_background(self._scheduled_parse())
+                logger.info("Initial save parse triggered on startup")
+
+    def _spawn_background(self, coro: object) -> None:
+        """建立背景 task 並自動清理引用，避免 GC 回收。"""
+        task = asyncio.create_task(coro)  # type: ignore[arg-type]
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
     async def cog_unload(self) -> None:
+        for task in self._background_tasks:
+            task.cancel()
+        self._background_tasks.clear()
         self.update_status.cancel()
         await self.rcon.close()
 
@@ -90,6 +142,20 @@ class ServerStatusCog(commands.Cog):
         try:
             result = await self.rcon.fetch_all()
             self._last_result = result
+
+            # 更新玩家身份映射
+            if result.players:
+                identities = [
+                    PlayerIdentityInfo(
+                        steam_id=p.steam_id,
+                        player_name=p.name,
+                        eos_id=p.eos_id,
+                    )
+                    for p in result.players
+                ]
+                await asyncio.to_thread(
+                    self.identity_service.update_players, identities
+                )
 
             if result.server_info:
                 result.server_info.max_players = self._max_players
@@ -125,6 +191,14 @@ class ServerStatusCog(commands.Cog):
             if self._prune_counter >= 120:
                 self._prune_counter = 0
                 await asyncio.to_thread(self.db.prune_old_data)
+
+            # 排程存檔解析
+            if self._save_parse_interval > 0:
+                self._save_parse_counter += self._update_interval
+                if self._save_parse_counter >= self._save_parse_interval:
+                    self._save_parse_counter = 0
+                    if self.save_service.is_available and not self.save_service.is_parsing:
+                        self._spawn_background(self._scheduled_parse())
 
             logger.debug("Status embed updated")
         except Exception:
@@ -356,6 +430,25 @@ class ServerStatusCog(commands.Cog):
         logger.info("Created new status message: %d", self._status_message.id)
         self._save_state(self._status_message.id)
 
+    async def _scheduled_parse(self) -> None:
+        """排程存檔解析（在背景執行，不阻塞狀態更新循環）。"""
+        # 每次排程解析時順便重讀 PlayerIDMapped.txt（~700 行，成本幾乎為零）
+        try:
+            await asyncio.to_thread(
+                self.identity_service.import_from_mapped_file,
+                self._player_id_mapped_path,
+            )
+        except Exception:
+            logger.exception("Failed to re-import PlayerIDMapped.txt")
+
+        try:
+            success = await self.save_service.parse_save()
+            if success:
+                logger.info("Scheduled save parse completed successfully")
+            else:
+                logger.warning("Scheduled save parse failed")
+        except Exception:
+            logger.exception("Scheduled save parse error")
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(ServerStatusCog(bot))

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import logging
 import re
 
@@ -23,6 +25,15 @@ logger = logging.getLogger("humanitz_bot.cogs.chat_bridge")
 
 _MENTION_RE = re.compile(r"@(everyone|here|&?\d+)")
 
+_COMMAND_PREFIX = "!"
+
+
+def _sanitize_for_discord(text: str) -> str:
+    """消毒文字以防止 Discord mention 攻擊（@everyone / @here / <@...>）。"""
+    text = discord.utils.escape_mentions(text)
+    text = text.replace("<@", "<\u200b@")
+    return text
+
 
 class ChatBridgeCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
@@ -33,7 +44,10 @@ class ChatBridgeCog(commands.Cog):
         self.chat_poll_interval: int = settings.chat_poll_interval
         self.chat_differ = ChatDiffer()
 
-        self._own_rcon: RconService | None = None
+        # 獨立 RCON 連線 — fetchchat + Discord→遊戲轉發，不與 status loop 爭搶鎖
+        self._rcon = RconService(
+            settings.rcon_host, settings.rcon_port, settings.rcon_password
+        )
 
     def _get_db(self) -> Database | None:
         status_cog = self.bot.get_cog("ServerStatusCog")
@@ -42,16 +56,8 @@ class ChatBridgeCog(commands.Cog):
         return None
 
     def _get_rcon(self) -> RconService:
-        status_cog = self.bot.get_cog("ServerStatusCog")
-        if status_cog is not None:
-            return status_cog.rcon  # type: ignore[attr-defined]
-
-        if self._own_rcon is None:
-            settings = self.bot.settings  # type: ignore[attr-defined]
-            self._own_rcon = RconService(
-                settings.rcon_host, settings.rcon_port, settings.rcon_password
-            )
-        return self._own_rcon
+        """取得聊天橋接專用的 RCON 連線。"""
+        return self._rcon
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
@@ -64,8 +70,7 @@ class ChatBridgeCog(commands.Cog):
 
     async def cog_unload(self) -> None:
         self.poll_chat.cancel()
-        if self._own_rcon:
-            await self._own_rcon.close()
+        await self._rcon.close()
 
     @tasks.loop(seconds=10)
     async def poll_chat(self) -> None:
@@ -91,11 +96,21 @@ class ChatBridgeCog(commands.Cog):
             db = self._get_db()
             for event in new_events:
                 if db and event.event_type != ChatEventType.UNKNOWN:
-                    self._log_event(db, event)
+                    await asyncio.to_thread(self._log_event, db, event)
+
+                # 偵測遊戲內指令（! 前綴）
+                if (
+                    event.event_type == ChatEventType.PLAYER_CHAT
+                    and event.message.startswith(_COMMAND_PREFIX)
+                ):
+                    await self._route_game_command(
+                        event.player_name, event.message, channel, "game"
+                    )
+                    continue
+
                 msg = self._format_event(event)
                 if msg:
                     await channel.send(msg)
-
         except Exception:
             logger.exception("Chat poll failed")
 
@@ -124,16 +139,16 @@ class ChatBridgeCog(commands.Cog):
             return None
 
         if event.event_type == ChatEventType.PLAYER_CHAT:
-            return f"**{event.player_name}**: {event.message}"
+            return f"**{_sanitize_for_discord(event.player_name)}**: {_sanitize_for_discord(event.message)}"
 
         if event.event_type == ChatEventType.PLAYER_JOINED:
-            return t("chat.joined", name=event.player_name)
+            return t("chat.joined", name=_sanitize_for_discord(event.player_name))
 
         if event.event_type == ChatEventType.PLAYER_LEFT:
-            return t("chat.left", name=event.player_name)
+            return t("chat.left", name=_sanitize_for_discord(event.player_name))
 
         if event.event_type == ChatEventType.PLAYER_DIED:
-            return t("chat.died", name=event.player_name)
+            return t("chat.died", name=_sanitize_for_discord(event.player_name))
 
         return None
 
@@ -151,6 +166,18 @@ class ChatBridgeCog(commands.Cog):
         if not content.strip():
             return
 
+        # 偵測 Discord 頻道中的指令
+        if content.strip().startswith(_COMMAND_PREFIX):
+            channel = self.bot.get_channel(self.chat_channel_id)
+            if isinstance(channel, discord.TextChannel):
+                await self._route_game_command(
+                    message.author.display_name,
+                    content.strip(),
+                    channel,
+                    "discord",
+                )
+            return
+
         max_len = 200
         if len(content) > max_len:
             content = content[:max_len] + "..."
@@ -158,7 +185,7 @@ class ChatBridgeCog(commands.Cog):
         admin_msg = f"[Discord] {message.author.display_name}: {content}"
 
         rcon = self._get_rcon()
-        response = await rcon.execute(f"admin {admin_msg}")
+        response = await rcon.execute(f"admin {admin_msg}", read_timeout=1.5)
 
         if response and "Message sent!" in response:
             logger.debug(
@@ -167,6 +194,28 @@ class ChatBridgeCog(commands.Cog):
         else:
             logger.warning("Failed to forward message: %s", response)
 
+    async def _route_game_command(
+        self,
+        player_name: str,
+        command_text: str,
+        channel: discord.TextChannel,
+        source: str,
+    ) -> None:
+        """將遊戲指令路由到 GameCommandsCog。"""
+        game_cmd_cog = self.bot.get_cog("GameCommandsCog")
+        if game_cmd_cog is None:
+            logger.debug("GameCommandsCog not loaded, ignoring command: %s", command_text)
+            return
+
+        try:
+            await game_cmd_cog.handle_command(  # type: ignore[attr-defined]
+                player_name=player_name,
+                command_text=command_text,
+                channel=channel,
+                source=source,
+            )
+        except Exception:
+            logger.exception("Failed to handle game command: %s", command_text)
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(ChatBridgeCog(bot))

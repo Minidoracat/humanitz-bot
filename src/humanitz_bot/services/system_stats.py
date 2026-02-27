@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass
 
@@ -14,6 +15,7 @@ logger = logging.getLogger("humanitz_bot.services.system_stats")
 _BYTES_PER_GB = 1024**3
 
 _last_net: dict[str, float] = {}
+_net_lock = threading.Lock()
 
 
 @dataclass
@@ -50,15 +52,16 @@ def get_system_stats() -> SystemStats:
     sent_per_sec = 0.0
     recv_per_sec = 0.0
 
-    if _last_net:
-        elapsed = now - _last_net["time"]
-        if elapsed > 0:
-            sent_per_sec = (net.bytes_sent - _last_net["sent"]) / elapsed
-            recv_per_sec = (net.bytes_recv - _last_net["recv"]) / elapsed
+    with _net_lock:
+        if _last_net:
+            elapsed = now - _last_net["time"]
+            if elapsed > 0:
+                sent_per_sec = max(0.0, (net.bytes_sent - _last_net["sent"]) / elapsed)
+                recv_per_sec = max(0.0, (net.bytes_recv - _last_net["recv"]) / elapsed)
 
-    _last_net["time"] = now
-    _last_net["sent"] = net.bytes_sent
-    _last_net["recv"] = net.bytes_recv
+        _last_net["time"] = now
+        _last_net["sent"] = net.bytes_sent
+        _last_net["recv"] = net.bytes_recv
 
     uptime = time.time() - psutil.boot_time()
 

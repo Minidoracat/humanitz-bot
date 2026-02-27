@@ -40,6 +40,7 @@ def setup_logging(level: str = "INFO", retention_days: int = 7) -> None:
     console_handler.setFormatter(formatter)
 
     root = logging.getLogger()
+    root.handlers.clear()  # Prevent duplicate handlers on re-entry
     root.setLevel(log_level)
     root.addHandler(file_handler)
     root.addHandler(console_handler)
@@ -81,7 +82,8 @@ async def main() -> None:
     try:
         await bot.start(settings.discord_token)
     except Exception as e:
-        logger.error("Bot crashed: %s", e)
+        logger.error("Bot crashed: %s", e, exc_info=True)
+        sys.exit(1)
     finally:
         if not bot.is_closed():
             await bot.close()

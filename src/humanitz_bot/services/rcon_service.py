@@ -72,8 +72,14 @@ class RconService:
         client = SourceRCON(self._host, self._port, timeout=10)
         if not client.connect():
             return False
-        if not client.authenticate(self._password):
+        try:
+            if not client.authenticate(self._password):
+                client.close()
+                return False
+        except Exception as e:
+            logger.error("Authentication failed with exception: %s", e)
             client.close()
+            self._client = None
             return False
         self._client = client
         self._backoff_index = 0
@@ -97,9 +103,10 @@ class RconService:
             logger.info(t("log.rcon_connected"))
             return True
 
-        backoff = self._backoff[min(self._backoff_index, len(self._backoff) - 1)]
+        delay = min(self._backoff[min(self._backoff_index, len(self._backoff) - 1)], 30)
         self._backoff_index += 1
-        logger.warning(t("log.rcon_reconnect_backoff"), backoff)
+        logger.info("Reconnecting in %.1fs (attempt %d)...", delay, self._backoff_index)
+        await asyncio.sleep(delay)
         return False
 
     async def execute(self, command: str, read_timeout: float = 3.5) -> str:
@@ -111,7 +118,8 @@ class RconService:
         async with self._lock:
             if not await self._ensure_connected():
                 return ""
-            assert self._client is not None
+            if self._client is None:
+                return ""
             try:
                 body, _packets = await asyncio.to_thread(
                     self._client.execute_simple, command, read_timeout
@@ -123,16 +131,20 @@ class RconService:
                 return ""
 
     async def fetch_all(self) -> FetchAllResult:
-        """批次執行 info + Players + fetchchat，回傳結構化資料。
+        """批次執行 info + Players，回傳結構化資料。
 
-        在同一個 lock 內依序執行三個指令，避免連線衝突。
+        fetchchat 由 ChatBridgeCog 的獨立 RCON 連線負責，不在此執行。
+        在同一個 lock 內依序執行兩個指令，避免連線衝突。
         """
         async with self._lock:
             if not await self._ensure_connected():
                 return FetchAllResult(
                     online=False, error=t("log.rcon_connection_failed")
                 )
-            assert self._client is not None
+            if self._client is None:
+                return FetchAllResult(
+                    online=False, error="RCON client unexpectedly None"
+                )
 
             result = FetchAllResult(online=True)
             try:
@@ -145,11 +157,6 @@ class RconService:
                     self._client.execute_simple, "Players", 3.5
                 )
                 result.players = self._parse_players(players_raw)
-
-                chat_raw, _ = await asyncio.to_thread(
-                    self._client.execute_simple, "fetchchat", 3.5
-                )
-                result.chat_raw = chat_raw
 
             except (RconConnectionError, OSError) as e:
                 logger.warning(t("log.rcon_fetch_interrupted"), e)
@@ -241,10 +248,11 @@ class RconService:
 
     async def close(self) -> None:
         """關閉 RCON 連線。"""
-        if self._client is not None:
-            try:
-                self._client.close()
-            except Exception:
-                pass
-            self._client = None
-            logger.info(t("log.rcon_service_closed"))
+        async with self._lock:
+            if self._client is not None:
+                try:
+                    self._client.close()
+                except Exception:
+                    pass
+                self._client = None
+                logger.info(t("log.rcon_service_closed"))

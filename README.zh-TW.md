@@ -17,6 +17,7 @@
 - **🗄️ SQLite 資料庫** — 持久化儲存玩家人數歷史、聊天記錄、上下線事件，含自動資料清理
 - **🌐 多語系支援** — 英文與繁體中文介面
 - **📝 日誌輪替** — 按日分檔，可設定保留天數
+- **🎮 遊戲指令（可選）** — 透過 [uesave](https://github.com/trumank/uesave-rs) 解析存檔，支援遊戲內 `!` 指令查詢。玩家可查詢座標、生存狀態、排行榜、伺服器狀態及說明。支援英文與中文別名。回應同時顯示在 Discord 和遊戲內。可透過 `ENABLE_GAME_COMMANDS` 開關此功能。
 
 ## 截圖預覽
 
@@ -30,14 +31,18 @@ src/humanitz_bot/
 ├── bot.py               # Discord bot 初始化、Cog 載入
 ├── config.py            # 從 .env 載入設定並驗證
 ├── rcon_client.py       # Source RCON 協議（針對 HumanitZ 最佳化）
+├── save_extractor.py    # 子程序：從 uesave JSON 提取玩家資料
 ├── cogs/
 │   ├── server_status.py # 狀態 Embed 自動更新（預設 30 秒）
-│   └── chat_bridge.py   # 聊天橋接輪詢（預設 5 秒）
+│   ├── chat_bridge.py   # 聊天橋接輪詢 + 遊戲指令路由
+│   └── game_commands.py # 遊戲內 ! 指令（座標、狀態、排行等）
 ├── services/
 │   ├── database.py      # SQLite WAL 模式 + 執行緒安全
 │   ├── rcon_service.py  # 非同步 RCON 封裝 + 自動重連
 │   ├── chart_service.py # Matplotlib 圖表生成
 │   ├── player_tracker.py# 從 PlayerConnectedLog.txt 計算在線時長
+│   ├── player_identity.py# 玩家名稱 ↔ SteamID 對應
+│   ├── save_service.py  # 存檔解析排程 + 查詢 API
 │   └── system_stats.py  # CPU、記憶體、磁碟、網路（psutil）
 └── utils/
     ├── chat_parser.py   # fetchchat 標記解析器 + 去重比對
@@ -94,6 +99,11 @@ cp .env.example .env
 | `DEATH_COUNT_HOURS` | | 死亡統計的時間範圍，單位小時（預設：`24`） |
 | `LOCALE` | | `en` 或 `zh-TW`（預設：`en`） |
 | `PLAYER_LOG_PATH` | | `PlayerConnectedLog.txt` 檔案路徑 |
+| `ENABLE_GAME_COMMANDS` | | 啟用遊戲內 `!` 指令與存檔解析功能（預設：`true`） |
+| `SAVE_FILE_PATH` | | `Save_DedicatedSaveMP.sav` 路徑（未設定則自動偵測） |
+| `SAVE_JSON_PATH` | | uesave JSON 輸出路徑（預設：`/tmp/main_save.json`） |
+| `SAVE_PARSE_INTERVAL` | | 排程存檔解析間隔秒數（預設：`300`） |
+| `SAVE_PARSE_COOLDOWN` | | 指令觸發解析的最小冷卻秒數（預設：`60`） |
 
 完整選項請參考 [`.env.example`](.env.example)，亦提供[繁體中文版](.env.example.zh-TW)。
 
@@ -131,6 +141,51 @@ Bot 需要以下權限（intents）：
 - **Attach Files** — 上傳玩家人數圖表
 
 在 Discord Developer Portal → Bot → Privileged Gateway Intents 中啟用 **Message Content Intent**。
+
+## 遊戲指令（可選）
+
+Bot 支援遊戲內 `!` 指令，透過解析存檔資料查詢玩家狀態。此功能需要安裝 [uesave](https://github.com/trumank/uesave-rs)。
+
+### 安裝 uesave
+
+```bash
+# 使用 cargo（Rust 套件管理器）
+cargo install uesave
+
+# 或從 GitHub Releases 下載預編譯二進位檔
+# https://github.com/trumank/uesave-rs/releases
+```
+
+確認安裝：
+
+```bash
+uesave --version
+```
+
+### 可用指令
+
+| 指令 | 別名 | 說明 |
+|------|------|------|
+| `!coords` | `!位置` | 顯示你的目前座標 |
+| `!stats` | `!狀態` | 顯示生存狀態（血量、飢餓、口渴、擊殺等） |
+| `!top` | `!排行` | 存活天數排行榜（前 10 名） |
+| `!kills` | `!擊殺` | 擊殺統計排行榜（前 10 名，依殲屍擊殺數排序） |
+| `!server` | `!伺服器` | 伺服器狀態（經過天數、季節日數） |
+| `!help` | `!幫助` | 列出可用指令 |
+
+指令可在遊戲內和 Discord 聊天橋接頻道中使用。回應語言取決於使用的指令別名 — 英文指令（`!coords`）回應英文，中文指令（`!位置`）回應中文。
+
+### 運作原理
+
+1. 定期透過 `uesave to-json` 子程序解析存檔（`.sav`）
+2. 獨立的提取子程序載入 JSON 並輸出精簡摘要（~166KB，原始 ~280MB）
+3. 提取的資料儲存在 SQLite 中供快速查詢
+4. Bot 主程序不會載入完整 JSON — 記憶體使用最佳化
+
+### 停用遊戲指令
+
+在 `.env` 中設定 `ENABLE_GAME_COMMANDS=false` 即可完全停用此功能。停用時不需要安裝 uesave，Bot 其他功能正常運作。
+
 
 ## RCON 協議筆記
 

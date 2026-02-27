@@ -51,6 +51,12 @@ class Settings:
     log_level: str = "INFO"
     log_retention_days: int = 7
     player_log_path: str = "PlayerConnectedLog.txt"
+    # 存檔解析設定（選用）
+    enable_game_commands: bool = True
+    save_file_path: str = ""  # 空 = 自動偵測預設路徑
+    save_json_path: str = "/tmp/main_save.json"
+    save_parse_interval: int = 300  # seconds, 0 = disabled
+    save_parse_cooldown: int = 60   # min seconds between on-demand parses
 
     @classmethod
     def from_env(cls, env_path: str | None = None) -> Settings:
@@ -141,6 +147,15 @@ class Settings:
             "PLAYER_LOG_PATH",
             "PlayerConnectedLog.txt",
         ).strip()
+        enable_game_commands = os.getenv("ENABLE_GAME_COMMANDS", "true").strip().lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        save_file_path = os.getenv("SAVE_FILE_PATH", "").strip()
+        save_json_path = os.getenv("SAVE_JSON_PATH", "/tmp/main_save.json").strip()
+        save_parse_interval_str = os.getenv("SAVE_PARSE_INTERVAL", "300").strip()
+        save_parse_cooldown_str = os.getenv("SAVE_PARSE_COOLDOWN", "60").strip()
 
         # 類型轉換
         try:
@@ -157,8 +172,43 @@ class Settings:
             death_count_hours = int(death_count_hours_str)
             db_retention_days = int(db_retention_days_str)
             log_retention_days = int(log_retention_days_str)
+            save_parse_interval = int(save_parse_interval_str)
+            save_parse_cooldown = int(save_parse_cooldown_str)
         except ValueError as e:
             raise ValueError(f"Configuration type conversion error: {e}")
+
+        # 值域驗證 (O4 + O17)
+        _VALID_LOCALES = {"en", "zh-TW"}
+        if locale not in _VALID_LOCALES:
+            raise SystemExit(
+                f"Invalid LOCALE: '{locale}'. Must be one of: en, zh-TW"
+            )
+
+        if not 1 <= rcon_port <= 65535:
+            raise SystemExit(
+                f"Invalid RCON_PORT: {rcon_port}. Must be 1-65535"
+            )
+        if status_update_interval < 10:
+            raise SystemExit(
+                f"Invalid STATUS_UPDATE_INTERVAL: {status_update_interval}. Must be >= 10"
+            )
+        if chat_poll_interval < 2:
+            raise SystemExit(
+                f"Invalid CHAT_POLL_INTERVAL: {chat_poll_interval}. Must be >= 2"
+            )
+        if db_retention_days < 1:
+            raise SystemExit(
+                f"Invalid DB_RETENTION_DAYS: {db_retention_days}. Must be >= 1"
+            )
+        if enable_game_commands:
+            if save_parse_interval > 0 and save_parse_interval < 60:
+                raise SystemExit(
+                    f"Invalid SAVE_PARSE_INTERVAL: {save_parse_interval}. Must be >= 60 (or 0 to disable)"
+                )
+            if save_parse_cooldown < 10:
+                raise SystemExit(
+                    f"Invalid SAVE_PARSE_COOLDOWN: {save_parse_cooldown}. Must be >= 10"
+                )
 
         return cls(
             discord_token=discord_token,
@@ -183,4 +233,9 @@ class Settings:
             log_level=log_level,
             log_retention_days=log_retention_days,
             player_log_path=player_log_path,
+            enable_game_commands=enable_game_commands,
+            save_file_path=save_file_path,
+            save_json_path=save_json_path,
+            save_parse_interval=save_parse_interval,
+            save_parse_cooldown=save_parse_cooldown,
         )

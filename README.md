@@ -17,6 +17,7 @@ A Discord bot for [HumanitZ](https://store.steampowered.com/app/1935610/HumanitZ
 - **🗄️ SQLite Database** — Persistent storage for player count history, chat logs, and player session events with automatic data pruning
 - **🌐 Internationalization** — English and Traditional Chinese (繁體中文) UI support
 - **📝 Daily Rotated Logs** — Configurable log retention with daily rotation
+- **🎮 Game Commands (Optional)** — In-game `!` commands powered by [uesave](https://github.com/trumank/uesave-rs) save file parsing. Players can query coordinates, survival stats, leaderboards, server state, and help. Supports English and Chinese aliases. Responses appear in both Discord and in-game chat. Toggleable via `ENABLE_GAME_COMMANDS`.
 
 ## Screenshots
 
@@ -30,14 +31,18 @@ src/humanitz_bot/
 ├── bot.py               # Discord bot initialization, cog loading
 ├── config.py            # Settings from .env with validation
 ├── rcon_client.py       # Source RCON protocol (optimized for HumanitZ)
+├── save_extractor.py    # Subprocess: extract player data from uesave JSON
 ├── cogs/
 │   ├── server_status.py # Status embed auto-update loop (30s default)
-│   └── chat_bridge.py   # Chat bridge polling loop (5s default)
+│   ├── chat_bridge.py   # Chat bridge polling + game command routing
+│   └── game_commands.py # In-game ! commands (coords, stats, top, etc.)
 ├── services/
 │   ├── database.py      # SQLite with WAL mode + thread safety
 │   ├── rcon_service.py  # Async RCON wrapper with auto-reconnect
 │   ├── chart_service.py # Matplotlib chart generation
 │   ├── player_tracker.py# Online duration from PlayerConnectedLog.txt
+│   ├── player_identity.py# Player name ↔ SteamID mapping
+│   ├── save_service.py  # Save file parsing orchestration + query API
 │   └── system_stats.py  # CPU, memory, disk, network via psutil
 └── utils/
     ├── chat_parser.py   # fetchchat markup parser + dedup differ
@@ -94,6 +99,11 @@ Edit `.env` and fill in your values:
 | `DEATH_COUNT_HOURS` | | Time window in hours for death count (default: `24`) |
 | `LOCALE` | | `en` or `zh-TW` (default: `en`) |
 | `PLAYER_LOG_PATH` | | Path to `PlayerConnectedLog.txt` |
+| `ENABLE_GAME_COMMANDS` | | Enable in-game `!` commands with save file parsing (default: `true`) |
+| `SAVE_FILE_PATH` | | Path to `Save_DedicatedSaveMP.sav` (auto-detected if not set) |
+| `SAVE_JSON_PATH` | | Path for uesave JSON output (default: `/tmp/main_save.json`) |
+| `SAVE_PARSE_INTERVAL` | | Seconds between scheduled save parses (default: `300`) |
+| `SAVE_PARSE_COOLDOWN` | | Minimum seconds between on-demand parses (default: `60`) |
 
 See [`.env.example`](.env.example) for all options with detailed descriptions. A [Traditional Chinese version](.env.example.zh-TW) is also available.
 
@@ -131,6 +141,51 @@ The bot requires these permissions (intents):
 - **Attach Files** — Upload player count chart
 
 Enable **Message Content Intent** in Discord Developer Portal → Bot → Privileged Gateway Intents.
+
+## Game Commands (Optional)
+
+The bot supports in-game `!` commands that query parsed save file data. This feature requires [uesave](https://github.com/trumank/uesave-rs) to be installed.
+
+### Install uesave
+
+```bash
+# Using cargo (Rust package manager)
+cargo install uesave
+
+# Or download pre-built binary from GitHub releases
+# https://github.com/trumank/uesave-rs/releases
+```
+
+Verify installation:
+
+```bash
+uesave --version
+```
+
+### Available Commands
+
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `!coords` | `!位置` | Show your current coordinates |
+| `!stats` | `!狀態` | Show your survival stats (health, hunger, thirst, kills, etc.) |
+| `!top` | `!排行` | Survival days leaderboard (top 10) |
+| `!kills` | `!擊殺` | Kill statistics leaderboard (top 10 by zombie kills) |
+| `!server` | `!伺服器` | Server state (days passed, season day) |
+| `!help` | `!幫助` | List available commands |
+
+Commands can be used both in-game and in the Discord chat bridge channel. The response language is determined by which alias you use — English alias (`!coords`) returns English, Chinese alias (`!位置`) returns Chinese.
+
+### How It Works
+
+1. Save file (`.sav`) is parsed periodically using `uesave to-json` (subprocess)
+2. A separate extractor subprocess loads the JSON and outputs a small summary (~166KB from ~280MB)
+3. Extracted data is stored in SQLite for fast queries
+4. The bot process never loads the large JSON — memory-efficient by design
+
+### Disabling Game Commands
+
+Set `ENABLE_GAME_COMMANDS=false` in `.env` to disable this feature entirely. The bot will function normally without uesave installed when disabled.
+
 
 ## RCON Protocol Notes
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections import deque
+from datetime import datetime, timedelta
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -48,7 +48,13 @@ class PlayerTracker:
 
         try:
             with open(self._log_path, encoding="utf-8", errors="replace") as f:
-                tail_lines = list(deque(f, maxlen=_TAIL_LINES))
+                # O24: seek 到檔案末尾附近，避免 O(n) 全檔掃描
+                f.seek(0, 2)
+                size = f.tell()
+                f.seek(max(0, size - 65536))  # 回退 64KB，足夠涵蓋 200+ 行
+                if f.tell() > 0:
+                    f.readline()  # 跳過可能不完整的首行
+                tail_lines = f.readlines()[-_TAIL_LINES:]
         except OSError as e:
             logger.error(t("log.player_log_read_error"), e)
             return {}

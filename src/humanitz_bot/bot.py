@@ -43,18 +43,29 @@ async def create_bot(settings: Settings) -> commands.Bot:
         )
         logger.info("Connected to %d guild(s)", len(bot.guilds))
 
-    # 載入 cogs（使用 try/except 因為 cogs 可能尚未實作）
-    cogs = [
+    # 載入核心 cogs（失敗則中止啟動）
+    core_cogs = [
         "humanitz_bot.cogs.server_status",
         "humanitz_bot.cogs.chat_bridge",
     ]
 
-    for cog in cogs:
+    for cog in core_cogs:
         try:
             await bot.load_extension(cog)
             logger.info("Loaded cog: %s", cog)
         except Exception as e:
-            logger.warning("Failed to load cog %s: %s", cog, e)
+            logger.error("Failed to load core cog %s: %s", cog, e)
+            raise
+
+    # 載入選用 cogs（失敗僅警告）
+    if settings.enable_game_commands:
+        try:
+            await bot.load_extension("humanitz_bot.cogs.game_commands")
+            logger.info("Loaded cog: humanitz_bot.cogs.game_commands")
+        except Exception as e:
+            logger.warning("Failed to load optional cog game_commands: %s", e)
+    else:
+        logger.info("Game commands disabled via ENABLE_GAME_COMMANDS=false")
 
     logger.info("Bot initialization complete")
 

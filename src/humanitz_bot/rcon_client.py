@@ -96,13 +96,15 @@ class SourceRCON:
         """精確讀取 n bytes，確保完整接收。"""
         if self._sock is None:
             raise RconConnectionError(t("error.rcon_not_connected"))
-        data = b""
-        while len(data) < n:
-            chunk = self._sock.recv(n - len(data))
-            if not chunk:
+        buf = bytearray(n)
+        view = memoryview(buf)
+        pos = 0
+        while pos < n:
+            nbytes = self._sock.recv_into(view[pos:], n - pos)
+            if nbytes == 0:
                 raise RconConnectionError(t("error.rcon_connection_closed"))
-            data += chunk
-        return data
+            pos += nbytes
+        return bytes(buf)
 
     def _read_packet_raw(self) -> tuple[int, int, int, bytes, str]:
         """讀取並解析一個 RCON 封包。
@@ -112,6 +114,10 @@ class SourceRCON:
         """
         raw_size = self._recv_exact(4)
         (size,) = struct.unpack("<i", raw_size)
+
+        if size < 10 or size > 4096:
+            logger.warning("Invalid RCON packet size: %d", size)
+            raise ValueError(f"Invalid RCON packet size: {size} (expected 10-4096)")
 
         raw_data = self._recv_exact(size)
         request_id = struct.unpack("<i", raw_data[0:4])[0]
@@ -238,6 +244,8 @@ class SourceRCON:
                 body_parts.append(body)
         except socket.timeout:
             pass
+        except (ConnectionError, BrokenPipeError, OSError) as e:
+            raise
         except Exception as e:
             packets.append({"error": str(e)})
             logger.warning(t("log.rcon_read_error"), e)
@@ -258,7 +266,7 @@ class SourceRCON:
         if self._sock:
             try:
                 self._sock.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Error closing RCON socket: %s", e)
             self._sock = None
             logger.info(t("log.rcon_connection_closed"))
