@@ -78,11 +78,12 @@ SEASON_EMOJI: dict[str, str] = {
 }
 
 WEATHER_EMOJI: dict[str, str] = {
-    "Clear": "☀️",
+    "Clear Skies": "☀️",
     "Overcast": "🌥️",
     "Cloudy": "☁️",
     "Rain": "🌧️",
     "Storm": "⛈️",
+    "Thunderstorm": "⛈️",
     "Snow": "🌨️",
     "Fog": "🌫️",
 }

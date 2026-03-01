@@ -228,7 +228,11 @@ class ServerStatusCog(commands.Cog):
             season_emoji = get_season_emoji(info.season)
             weather_emoji = get_weather_emoji(info.weather)
             season_name = t(f"season.{info.season}") if info.season else "?"
-            weather_name = t(f"weather.{info.weather}") if info.weather else "?"
+            weather_key = f"weather.{info.weather}"
+            weather_name = t(weather_key) if info.weather else "?"
+            # 若翻譯找不到 key，fallback 顯示原始天氣值而非 "weather:XXX"
+            if info.weather and weather_name == weather_key:
+                weather_name = info.weather
             embed.add_field(
                 name=t("status.server_info"),
                 value=(

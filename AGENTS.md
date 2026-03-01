@@ -1,12 +1,12 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-02-27
-**Commit:** 7be1fda
+**Generated:** 2026-02-28
+**Commit:** ba2e98e
 **Branch:** main
 
 ## OVERVIEW
 
-HumanitZ Discord bot — real-time server status embed, bidirectional chat bridge, player tracking via RCON. Python 3.12 + discord.py 2.6 + uv package manager, src-layout.
+HumanitZ Discord bot — real-time server status embed, bidirectional chat bridge, in-game command system with save file parsing, player tracking via RCON. Python 3.12 + discord.py 2.6 + uv package manager, src-layout.
 
 ## STRUCTURE
 
@@ -14,24 +14,28 @@ HumanitZ Discord bot — real-time server status embed, bidirectional chat bridg
 humanitz-bot/
 ├── src/humanitz_bot/
 │   ├── __main__.py          # Entry: logging, signals, asyncio.run(main())
-│   ├── bot.py               # Factory: create_bot() → intents, cog loading
+│   ├── bot.py               # Factory: create_bot() → intents, cog loading (core + optional)
 │   ├── config.py            # Settings dataclass from .env with validation
 │   ├── rcon_client.py       # Sync TCP socket RCON (HumanitZ-specific quirks)
+│   ├── save_extractor.py    # Subprocess: extract player data from uesave JSON (~280MB→~数百KB)
 │   ├── cogs/
 │   │   ├── server_status.py # 30s tasks.loop: RCON fetch → embed → chart
-│   │   └── chat_bridge.py   # 5s tasks.loop: fetchchat diff + on_message relay
+│   │   ├── chat_bridge.py   # 5s tasks.loop: fetchchat diff + on_message relay + !command dispatch
+│   │   └── game_commands.py # [Optional] In-game !commands: coords/stats/top/kills/server/help (双語)
 │   ├── services/
 │   │   ├── rcon_service.py  # Async wrapper: auto-reconnect, structured parsing
-│   │   ├── database.py      # SQLite WAL + threading.Lock, 3 tables
+│   │   ├── database.py      # SQLite WAL + threading.Lock, 6 tables (player_count/sessions/chat/identity/save_data/save_meta)
 │   │   ├── chart_service.py # Matplotlib 24h player chart (Discord dark theme)
 │   │   ├── player_tracker.py# Parse PlayerConnectedLog.txt tail for online duration
+│   │   ├── player_identity.py # Name↔SteamID bidirectional mapping (memory cache + SQLite persist)
+│   │   ├── save_service.py  # uesave→JSON→extract→SQLite pipeline (subprocess to avoid OOM)
 │   │   └── system_stats.py  # psutil: CPU/RAM/disk/network with delta calc
 │   └── utils/
-│       ├── chat_parser.py   # ChatDiffer: snapshot-based dedup + HumanitZ markup
+│       ├── chat_parser.py   # ChatDiffer: snapshot-based dedup + HumanitZ markup + !command detection
 │       ├── formatters.py    # Progress bars, duration, emoji maps (pure functions)
-│       └── i18n.py          # Hardcoded dict i18n: en + zh-TW
+│       └── i18n.py          # Hardcoded dict i18n: en + zh-TW (expanded with game command strings)
 ├── data/                    # Runtime: SQLite DB + status_state.json (gitignored)
-├── tmp/                     # Temp: player_chart.png (overwritten each cycle)
+├── tmp/                     # Temp: player_chart.png, save JSON (overwritten each cycle)
 ├── logs/                    # Daily-rotated bot.log (gitignored)
 ├── Dockerfile               # python:3.12-slim + uv, two-layer cache
 └── docker-compose.yml       # restart: unless-stopped, 3 volume mounts
@@ -49,6 +53,9 @@ humanitz-bot/
 | Add embed field | `cogs/server_status.py` `_build_embed()` | Mind `_EMBED_FIELD_LIMIT = 1024` |
 | Modify chart style | `services/chart_service.py` | `_DISCORD_DARK`, `_DISCORD_BLURPLE` constants |
 | Debug RCON protocol | `rcon_client.py` | Set `LOG_LEVEL=DEBUG` in .env for full packet dumps |
+| Add in-game command | `cogs/game_commands.py` | Add to `_COMMAND_ALIASES` dict + handler method |
+| Modify save parsing | `save_extractor.py` + `services/save_service.py` | Extractor runs as subprocess to avoid 280MB memory spike |
+| Player name lookup | `services/player_identity.py` | Fuzzy match via `resolve_player()` — name/partial/steamid |
 
 ## BOOT SEQUENCE
 
@@ -60,12 +67,14 @@ uv run python -m humanitz_bot
   ├─ set_locale()                 # Global i18n state
   ├─ create_bot(settings)
   │   ├─ bot.settings = settings  # Dynamic attr (type: ignore)
-  │   ├─ load_extension(server_status)
-  │   │   └─ Inits: RconService, Database, ChartService, PlayerTracker
-  │   └─ load_extension(chat_bridge)
-  │       └─ Inits: ChatDiffer only (RCON/DB borrowed from ServerStatusCog)
+  │   ├─ load_extension(server_status)       # Core: always loaded
+  │   │   └─ Inits: RconService, Database, ChartService, PlayerTracker, PlayerIdentityService
+  │   ├─ load_extension(chat_bridge)          # Core: always loaded
+  │   │   └─ Inits: ChatDiffer (RCON/DB borrowed from ServerStatusCog)
+  │   └─ load_extension(game_commands)        # Optional: ENABLE_GAME_COMMANDS=true
+  │       └─ Inits: SaveService, PlayerIdentityService (borrowed from ServerStatusCog)
   └─ bot.start(token)
-      └─ on_ready → starts both tasks.loop (status 30s, chat 5s)
+      └─ on_ready → starts tasks.loop (status 30s, chat 5s)
 ```
 
 ## DATA FLOW
@@ -76,6 +85,10 @@ uv run python -m humanitz_bot
 
 **Discord→Game**: `on_message` → strip @mentions → `rcon.execute("admin [Discord] name: msg")` → verify "Message sent!"
 
+**In-game commands** (via chat_bridge): `on_game_chat` event → `ChatDiffer` detects `!command` → dispatches `on_game_command` → `GameCommandsCog` handles → `rcon.execute("admin response")` back to game
+
+**Save parsing** (on-demand): `SaveService.refresh()` → subprocess `uesave to-json` (~10s, ~280MB JSON) → subprocess `save_extractor.py` (extract players/vehicles) → compact JSON → `Database` upsert → query from SQLite
+
 ## CONVENTIONS
 
 - `from __future__ import annotations` — every module, no exceptions
@@ -85,7 +98,7 @@ uv run python -m humanitz_bot
 - Docstrings in Chinese (繁體中文), log messages in English
 - Sync I/O wrapped with `asyncio.to_thread()` — RCON and DB are both sync
 - Constants: `_UPPER_SNAKE_CASE` with underscore prefix (module-private)
-- No slash commands — bot is purely event-driven (tasks.loop + on_message)
+- No slash commands — bot uses `on_message` events + in-game `!command` via RCON chat
 - `@dataclass` for data structures: Settings, ServerInfo, PlayerInfo, etc.
 
 ## ANTI-PATTERNS (THIS PROJECT)
@@ -109,6 +122,10 @@ uv run python -m humanitz_bot
 | Global mutable net stats | `system_stats.py:16` | `_last_net` module-level dict — no lock, relies on `asyncio.to_thread` serialization |
 | Two persistence mechanisms | `status_state.json` + SQLite | Status message ID in JSON, everything else in DB |
 | uv.lock in .gitignore | `.gitignore:25` | Lock file not tracked — builds may not be reproducible |
+| Save parsing memory spike | `save_service.py` | uesave JSON ~280MB — runs as subprocess to isolate memory; main bot stays ~150MB |
+| Game command cooldown | `game_commands.py` | 5s global cooldown per player to prevent RCON spam |
+| PlayerIdentity fuzzy match | `player_identity.py` | `resolve_player()` tries exact→prefix→substring; may return wrong player on ambiguous names |
+| Core vs optional cogs | `bot.py:46-68` | `server_status` and `chat_bridge` are core (fail=abort); `game_commands` is optional (fail=warn) |
 
 ## COMMANDS
 
@@ -129,8 +146,10 @@ LOG_LEVEL=DEBUG uv run python -m humanitz_bot  # Full RCON packet traces
 
 - **No tests exist.** No pytest, no test files, no CI/CD workflows.
 - **No linting configured.** No ruff/flake8/mypy/pyright in pyproject.toml.
-- **Adding a new cog**: Create `src/humanitz_bot/cogs/my_cog.py` with `async def setup(bot)` → append `"humanitz_bot.cogs.my_cog"` to cogs list in `bot.py:47-50`.
-- **Adding a new service**: Create in `services/`, instantiate in the cog that needs it. If shared across cogs, consider refactoring to bot-level injection.
+- **Adding a new cog**: Create `src/humanitz_bot/cogs/my_cog.py` with `async def setup(bot)`. Core cogs → `bot.py:47-50` list. Optional cogs → add `settings.enable_xxx` flag + conditional load block.
+- **Adding a new service**: Create in `services/`, instantiate in the cog that needs it. If shared across cogs, borrow via `bot.get_cog("SourceCog").service`.
 - **RCON protocol reference**: Valve Source RCON (with HumanitZ deviations documented in `rcon_client.py` docstring).
 - **Required .env fields**: `DISCORD_TOKEN`, `STATUS_CHANNEL_ID`, `CHAT_CHANNEL_ID`, `RCON_PASSWORD`. Bot exits with descriptive error if missing.
+- **Optional .env fields**: `ENABLE_GAME_COMMANDS` (default false), `SAVE_FILE_PATH`, `GAME_COMMAND_CHANNEL_ID`, `SAVE_PARSE_INTERVAL_MINUTES`.
 - **Placeholder detection**: Config rejects values matching `YOUR_*`, `PLACEHOLDER`, `CHANGEME`, `TODO`, `*_HERE` patterns.
+- **In-game command system**: Players type `!help`, `!coords`, `!stats`, `!top`, `!kills`, `!server` in game chat. Chinese aliases: `!幫助`, `!位置`, `!狀態`, `!排行`, `!擊殺`, `!伺服器`. Requires `ENABLE_GAME_COMMANDS=true` + `uesave` binary.

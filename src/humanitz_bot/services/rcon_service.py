@@ -45,8 +45,8 @@ class FetchAllResult:
     error: str | None = None
 
 
-# regex: 玩家名 (Steam64ID_+_|EOS_ID)
-_PLAYER_RE = re.compile(r"^(.+?) \((\d+)_\+_\|([a-f0-9]+)\)$")
+# regex: 玩家名 (Steam64ID_+_|EOS_ID) — 後方可能有 Lv/Clan/DPassed（2026-03-01 更新新增）
+_PLAYER_RE = re.compile(r"^(.+?) \((\d+)_\+_\|([a-f0-9]+)\)")
 # AI: Zombies=135  Human=5 Animal=16
 _AI_RE = re.compile(r"Zombies=(\d+)\s+Human=(\d+)\s+Animal=(\d+)")
 
@@ -197,7 +197,10 @@ class RconService:
                 continue
 
             if stripped.startswith("Name: "):
-                info.name = stripped[6:]
+                raw_name = stripped[6:]
+                # 遊戲更新 2026-03-01 起，名稱後方新增 (Uptime: X minutes)
+                uptime_m = re.search(r"\s*\(Uptime:.*\)$", raw_name)
+                info.name = raw_name[:uptime_m.start()] if uptime_m else raw_name
             elif stripped == "Players:":
                 in_players_section = True
             elif stripped.startswith("Season: "):
@@ -228,7 +231,11 @@ class RconService:
     def _parse_players(raw: str) -> list[PlayerInfo]:
         """解析 Players 指令回應。
 
-        每行格式: ``玩家名 (Steam64ID_+_|EOS_ProductUserID)``
+        每行格式（2026-03-01 更新後）::
+
+            玩家名 (Steam64ID_+_|EOS_ProductUserID) Lv:X Clan:ClanName DPassed:X
+
+        舊格式（無 Lv/Clan/DPassed）亦相容。
         """
         players: list[PlayerInfo] = []
         for line in raw.replace("\r\n", "\n").split("\n"):

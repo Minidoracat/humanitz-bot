@@ -29,18 +29,38 @@ class ChatEvent:
     raw_line: str  # 原始未解析行
 
 
-# 編譯正則表達式 patterns
+# 時間戳前綴: [1/3/2,026 - 14:7] — 遊戲更新 2026-03-01 起新增
+_TIMESTAMP_RE = re.compile(r"^\[[\d,/]+ - [\d:]+\]\s*")
+
+# 編譯正則表達式 patterns（匹配去除時間戳後的內容）
 _CHAT_RE = re.compile(r"^<PN>(.+?):</>(.+)$")
 # 管理員玩家聊天: <SP>[Admin]</><PN>PlayerName:</>Message
 _ADMIN_CHAT_RE = re.compile(r"^<SP>\[Admin\]</><PN>(.+?):</>(.+)$")
-_JOIN_RE = re.compile(r"^Player Joined \(<PN>(.+?)</>\)$")
-_LEFT_RE = re.compile(r"^Player Left \(<PN>(.+?)</>\)$")
-_DIED_RE = re.compile(r"^Player died \(<PN>(.+?)</>\)$")
+_JOIN_RE = re.compile(r"^Player Joined \(<PN>(.*?)</>\)$")
+_LEFT_RE = re.compile(r"^Player Left \(<PN>(.*?)</>\)$")
+_DIED_RE = re.compile(r"^Player died \(<PN>(.*?)</>\)$")
 _ADMIN_RE = re.compile(r"^<SP>Admin: (.+)</>$")
+
+
+def _strip_timestamp(line: str) -> str:
+    """移除 fetchchat 行首的時間戳前綴。
+
+    遊戲更新 2026-03-01 起，fetchchat 每行新增 [M/D/Y - HH:MM] 前綴。
+    同時相容舊格式（無時間戳）。
+
+    Examples:
+        >>> _strip_timestamp("[1/3/2,026 - 14:7] <PN>kevin:</>hi")
+        '<PN>kevin:</>hi'
+        >>> _strip_timestamp("<PN>kevin:</>hi")
+        '<PN>kevin:</>hi'
+    """
+    return _TIMESTAMP_RE.sub("", line)
 
 
 def parse_chat_line(line: str) -> ChatEvent:
     """解析單行 fetchchat 輸出
+
+    支援帶時間戳前綴（2026-03-01+ 新格式）與無時間戳（舊格式）的行。
 
     Args:
         line: fetchchat 輸出的單行文字
@@ -49,15 +69,18 @@ def parse_chat_line(line: str) -> ChatEvent:
         ChatEvent: 解析後的事件物件
 
     Examples:
-        >>> parse_chat_line("<PN>kevin052926:</>嗨嗨")
+        >>> parse_chat_line("[1/3/2,026 - 14:7] <PN>kevin052926:</>嗨嗨")
         ChatEvent(event_type=ChatEventType.PLAYER_CHAT, player_name='kevin052926', message='嗨嗨', raw_line='...')
 
-        >>> parse_chat_line("Player Joined (<PN>OG83</>)")
+        >>> parse_chat_line("[1/3/2,026 - 14:7] Player Joined (<PN>OG83</>)")
         ChatEvent(event_type=ChatEventType.PLAYER_JOINED, player_name='OG83', message='', raw_line='...')
     """
+    # 先移除時間戳前綴，再進行 pattern 匹配
+    stripped = _strip_timestamp(line)
+
     # 管理員玩家聊天: <SP>[Admin]</><PN>PlayerName:</>MessageText
     # 必須在普通玩家聊天之前檢查，因為普通 regex 無法匹配此格式
-    m = _ADMIN_CHAT_RE.match(line)
+    m = _ADMIN_CHAT_RE.match(stripped)
     if m:
         return ChatEvent(
             event_type=ChatEventType.PLAYER_CHAT,
@@ -67,7 +90,7 @@ def parse_chat_line(line: str) -> ChatEvent:
         )
 
     # 普通玩家聊天: <PN>PlayerName:</>MessageText
-    m = _CHAT_RE.match(line)
+    m = _CHAT_RE.match(stripped)
     if m:
         return ChatEvent(
             event_type=ChatEventType.PLAYER_CHAT,
@@ -76,7 +99,7 @@ def parse_chat_line(line: str) -> ChatEvent:
             raw_line=line,
         )
     # 玩家加入: Player Joined (<PN>PlayerName</>)
-    m = _JOIN_RE.match(line)
+    m = _JOIN_RE.match(stripped)
     if m:
         return ChatEvent(
             event_type=ChatEventType.PLAYER_JOINED,
@@ -86,7 +109,7 @@ def parse_chat_line(line: str) -> ChatEvent:
         )
 
     # 玩家離開: Player Left (<PN>PlayerName</>)
-    m = _LEFT_RE.match(line)
+    m = _LEFT_RE.match(stripped)
     if m:
         return ChatEvent(
             event_type=ChatEventType.PLAYER_LEFT,
@@ -96,7 +119,7 @@ def parse_chat_line(line: str) -> ChatEvent:
         )
 
     # 玩家死亡: Player died (<PN>PlayerName</>)
-    m = _DIED_RE.match(line)
+    m = _DIED_RE.match(stripped)
     if m:
         return ChatEvent(
             event_type=ChatEventType.PLAYER_DIED,
@@ -106,7 +129,7 @@ def parse_chat_line(line: str) -> ChatEvent:
         )
 
     # 管理員訊息: <SP>Admin: MessageText</>
-    m = _ADMIN_RE.match(line)
+    m = _ADMIN_RE.match(stripped)
     if m:
         return ChatEvent(
             event_type=ChatEventType.ADMIN_MESSAGE,
