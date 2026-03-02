@@ -12,8 +12,9 @@ from humanitz_bot.utils.i18n import t
 logger = logging.getLogger("humanitz_bot.services.player_tracker")
 
 # 匹配格式: Player Connected NAME NetID(STEAMID_+_|EOSID) (DD/MM/Y,YYY HH:MM)
+# 年份千位分隔符因系統語系不同可能是逗號(2,026)或空格(2 026)
 _CONNECTED_RE = re.compile(
-    r"^Player Connected (.+?) NetID\(.+?\) \((\d+/\d+/[\d,]+)\s+(\d+:\d+)\)$"
+    r"^Player Connected (.+?) NetID\(.+?\) \((\d+/\d+/[\d, ]+)\s+(\d+:\d+)\)$"
 )
 
 _TAIL_LINES = 200
@@ -121,8 +122,8 @@ class PlayerTracker:
                 if name not in remaining:
                     continue
 
-                # 解析日期 — 年份有逗號: 2,026 → 2026
-                date_str = m.group(2).replace(",", "")
+                # 解析日期 — 年份千位分隔符: 2,026 或 2 026 → 2026
+                date_str = re.sub(r"[, ]", "", m.group(2))
                 time_str = m.group(3)
 
                 try:

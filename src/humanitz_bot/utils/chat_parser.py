@@ -30,16 +30,32 @@ class ChatEvent:
 
 
 # 時間戳前綴: [1/3/2,026 - 14:7] — 遊戲更新 2026-03-01 起新增
-_TIMESTAMP_RE = re.compile(r"^\[[\d,/]+ - [\d:]+\]\s*")
+# 年份千位分隔符因系統語系不同可能是逗號(2,026)或空格(2 026)
+_TIMESTAMP_RE = re.compile(r"^\[\d+/\d+/[\d, ]+ - \d+:\d+\]\s*")
+
+# 內嵌時間戳: 用於分割黏合的多事件行（如 Event1</>)[ts2] Event2）
+_EMBEDDED_TS_RE = re.compile(r"(?<=\))(?=\[\d+/\d+/[\d, ]+ - \d+:\d+\])")
 
 # 編譯正則表達式 patterns（匹配去除時間戳後的內容）
-_CHAT_RE = re.compile(r"^<PN>(.+?):</>(.+)$")
-# 管理員玩家聊天: <SP>[Admin]</><PN>PlayerName:</>Message
-_ADMIN_CHAT_RE = re.compile(r"^<SP>\[Admin\]</><PN>(.+?):</>(.+)$")
-_JOIN_RE = re.compile(r"^Player Joined \(<PN>(.*?)</>\)$")
-_LEFT_RE = re.compile(r"^Player Left \(<PN>(.*?)</>\)$")
-_DIED_RE = re.compile(r"^Player died \(<PN>(.*?)</>\)$")
+# 玩家名稱使用 [^<]* 而非 .*? 以避免跨事件回溯配對的問題
+_CHAT_RE = re.compile(r"^<PN>([^<]+):</>(.+)$")
+# 管理員玩家聊天: <SP>[Admin]</><PN>PlayerName:</>訊息
+_ADMIN_CHAT_RE = re.compile(r"^<SP>\[Admin\]</><PN>([^<]+):</>(.+)$")
+_JOIN_RE = re.compile(r"^Player Joined \(<PN>([^<]*)</>\)$")
+_LEFT_RE = re.compile(r"^Player Left \(<PN>([^<]*)</>\)$")
+_DIED_RE = re.compile(r"^Player died \(<PN>([^<]*)</>\)$")
 _ADMIN_RE = re.compile(r"^<SP>Admin: (.+)</>$")
+
+
+def _split_events(line: str) -> list[str]:
+    """分割可能黏合的多事件行。
+
+    某些邊界情況下 RCON 可能將多個事件黏合在同一行：
+    [ts1] Event1</>)[ts2] Event2</>)
+    用內嵌時間戳分割為獨立行。
+    """
+    parts = _EMBEDDED_TS_RE.split(line)
+    return [p.strip() for p in parts if p.strip()]
 
 
 def _strip_timestamp(line: str) -> str:
@@ -47,9 +63,12 @@ def _strip_timestamp(line: str) -> str:
 
     遊戲更新 2026-03-01 起，fetchchat 每行新增 [M/D/Y - HH:MM] 前綴。
     同時相容舊格式（無時間戳）。
+    年份千位分隔符支援逗號(2,026)和空格(2 026)。
 
     Examples:
         >>> _strip_timestamp("[1/3/2,026 - 14:7] <PN>kevin:</>hi")
+        '<PN>kevin:</>hi'
+        >>> _strip_timestamp("[2/3/2 026 - 12:27] <PN>kevin:</>hi")
         '<PN>kevin:</>hi'
         >>> _strip_timestamp("<PN>kevin:</>hi")
         '<PN>kevin:</>hi'
@@ -69,11 +88,11 @@ def parse_chat_line(line: str) -> ChatEvent:
         ChatEvent: 解析後的事件物件
 
     Examples:
-        >>> parse_chat_line("[1/3/2,026 - 14:7] <PN>kevin052926:</>嗨嗨")
-        ChatEvent(event_type=ChatEventType.PLAYER_CHAT, player_name='kevin052926', message='嗨嗨', raw_line='...')
+        >>> parse_chat_line("[1/3/2,026 - 14:7] <PN>kevin052926:</>嘿嘿")
+        ChatEvent(event_type=ChatEventType.PLAYER_CHAT, player_name='kevin052926', ...)
 
         >>> parse_chat_line("[1/3/2,026 - 14:7] Player Joined (<PN>OG83</>)")
-        ChatEvent(event_type=ChatEventType.PLAYER_JOINED, player_name='OG83', message='', raw_line='...')
+        ChatEvent(event_type=ChatEventType.PLAYER_JOINED, player_name='OG83', ...)
     """
     # 先移除時間戳前綴，再進行 pattern 匹配
     stripped = _strip_timestamp(line)
@@ -218,8 +237,11 @@ class ChatDiffer:
         # 更新快照
         self._last_lines = current_lines
 
-        # 解析新行
-        new_events = [parse_chat_line(line) for line in new_lines]
+        # 解析新行（先分割可能黏合的多事件行）
+        new_events: list[ChatEvent] = []
+        for line in new_lines:
+            for sub_line in _split_events(line):
+                new_events.append(parse_chat_line(sub_line))
         logger.debug("Parsed %d new events", len(new_events))
 
         return new_events
