@@ -420,6 +420,7 @@ class AdminCommandsCog(commands.Cog):
             return False
 
         cmd_name, locale = mapping
+        logger.debug("Admin command matched: alias=%s → cmd=%s, locale=%s, source=%s, player=%s", alias, cmd_name, locale, source, player_name)
 
         # 權限檢查
         is_admin = False
@@ -431,6 +432,7 @@ class AdminCommandsCog(commands.Cog):
         if not is_admin:
             # 對非管理員不揭露管理指令的存在
             return False
+        logger.debug("Admin permission denied: source=%s, player=%s", source, player_name)
 
         # 冷卻檢查
         cooldown_key = str(message.author.id) if message is not None else player_name
@@ -446,6 +448,7 @@ class AdminCommandsCog(commands.Cog):
                 await channel.send(embed=embed)
             return True
 
+        logger.debug("Admin routing: cmd=%s, args=%s", cmd_name, args)
         # 路由到處理器
         try:
             if cmd_name in _PLAYER_COMMANDS:
@@ -486,6 +489,7 @@ class AdminCommandsCog(commands.Cog):
                 logger.exception("Failed to send error feedback for: %s", cmd_name)
 
         return True
+        logger.info("Admin command completed: %s (by %s via %s)", cmd_name, player_name if source == 'game' else getattr(message, 'author', '?'), source)
 
     # --- 玩家管理指令 ---
 
@@ -914,6 +918,7 @@ class AdminCommandsCog(commands.Cog):
         """執行 RCON 指令並傳送成功/失敗回應。"""
         try:
             response = await self._rcon.execute(full_command, read_timeout=5.0)
+            logger.debug("RCON execute result: cmd=%s → %r", full_command, response[:200] if response else None)
             rcon_cmd = full_command.split()[0]
             embed = discord.Embed(
                 description=_t(
