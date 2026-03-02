@@ -175,6 +175,7 @@ class ChatBridgeCog(commands.Cog):
                     content.strip(),
                     channel,
                     "discord",
+                    message=message,
                 )
             return
 
@@ -200,8 +201,27 @@ class ChatBridgeCog(commands.Cog):
         command_text: str,
         channel: discord.TextChannel,
         source: str,
+        message: discord.Message | None = None,
     ) -> None:
-        """將遊戲指令路由到 GameCommandsCog。"""
+        """將指令路由到 AdminCommandsCog 或 GameCommandsCog。"""
+        # 先嘗試管理員指令
+        admin_cog = self.bot.get_cog("AdminCommandsCog")
+        if admin_cog is not None:
+            try:
+                handled = await admin_cog.handle_command(  # type: ignore[attr-defined]
+                    player_name=player_name,
+                    command_text=command_text,
+                    channel=channel,
+                    source=source,
+                    message=message,
+                )
+                if handled:
+                    return
+            except Exception:
+                logger.exception("Admin command failed (not falling through): %s", command_text)
+                return  # 管理指令失敗時終止路由，不再 fallthrough 到一般指令
+
+        # 落入一般遊戲指令
         game_cmd_cog = self.bot.get_cog("GameCommandsCog")
         if game_cmd_cog is None:
             logger.debug("GameCommandsCog not loaded, ignoring command: %s", command_text)
@@ -213,6 +233,7 @@ class ChatBridgeCog(commands.Cog):
                 command_text=command_text,
                 channel=channel,
                 source=source,
+                message=message,
             )
         except Exception:
             logger.exception("Failed to handle game command: %s", command_text)

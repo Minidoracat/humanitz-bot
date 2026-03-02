@@ -131,12 +131,29 @@ class GameCommandsCog(commands.Cog):
         self._cooldowns[player_name] = now
         return 0.0
 
+    async def _check_admin(
+        self, source: str, message: discord.Message | None,
+        player_name: str = "",
+    ) -> bool:
+        """檢查呼叫者是否為管理員（用於 help 指令顯示管理員指令）。"""
+        admin_cog = self.bot.get_cog("AdminCommandsCog")
+        if admin_cog is None:
+            return False
+        if source == "discord" and message is not None:
+            return admin_cog.is_admin(  # type: ignore[attr-defined]
+                source, message, "",
+            )
+        if source == "game" and player_name:
+            return await admin_cog.check_game_admin(player_name)  # type: ignore[attr-defined]
+        return False
+
     async def handle_command(
         self,
         player_name: str,
         command_text: str,
         channel: discord.TextChannel,
         source: str = "game",
+        message: discord.Message | None = None,
     ) -> None:
         """主要進入點 — 由 chat_bridge 呼叫處理 ! 指令。
 
@@ -145,6 +162,7 @@ class GameCommandsCog(commands.Cog):
             command_text: 完整指令文字（含 ! 前綴）
             channel: Discord 頻道
             source: 來源，"game" 或 "discord"
+            message: Discord Message 物件（Discord 來源時傳入，用於管理員檢查）
         """
         # 檢查功能是否啟用
         settings = getattr(self.bot, "settings", None)
@@ -162,6 +180,11 @@ class GameCommandsCog(commands.Cog):
         # 查找別名
         mapping = _COMMAND_ALIASES.get(alias)
         if mapping is None:
+            # 檢查是否為管理員指令 — 管理員指令由 AdminCommandsCog 處理
+            # 如果不是管理員指令才顯示「未知指令」
+            admin_cog = self.bot.get_cog("AdminCommandsCog")
+            if admin_cog is not None and admin_cog.is_admin_command(alias):  # type: ignore[attr-defined]
+                return  # 管理員指令已由 AdminCommandsCog 處理（或權限不足時靜默）
             # 未知指令 — 使用 .env 全域語系
             locale = i18n._current_locale
             embed = discord.Embed(
@@ -206,7 +229,7 @@ class GameCommandsCog(commands.Cog):
             elif cmd_name == "server":
                 embed, plain = await self._cmd_server(locale)
             elif cmd_name == "help":
-                embed, plain = await self._cmd_help(locale)
+                embed, plain = await self._cmd_help(locale, source, message, player_name)
             else:
                 return
 
@@ -532,8 +555,13 @@ class GameCommandsCog(commands.Cog):
 
         return embed, plain
 
-    async def _cmd_help(self, locale: str) -> tuple[discord.Embed, str]:
-        """!help / !幫助 — 顯示可用指令列表。"""
+    async def _cmd_help(
+        self, locale: str,
+        source: str = "game",
+        message: discord.Message | None = None,
+        player_name: str = "",
+    ) -> tuple[discord.Embed, str]:
+        """!help / !幫助 — 顯示可用指令列表。管理員可看到額外指令。"""
         title = _t("cmd.help.title", locale)
         desc = _t("cmd.help.description", locale)
 
@@ -548,14 +576,34 @@ class GameCommandsCog(commands.Cog):
             _t("cmd.help.help", locale),
         ]
 
+        plain = _t("cmd.plain.help", locale)
+
+        # 檢查是否為管理員 — 是的話附加管理員指令
+        is_admin = await self._check_admin(source, message, player_name)
+        if is_admin:
+            lines.append("")
+            lines.append(f"\n**{_t('admin.help.title', locale)}**")
+            lines.append(_t("admin.help.description", locale))
+            lines.append(_t("admin.help.kick", locale))
+            lines.append(_t("admin.help.ban", locale))
+            lines.append(_t("admin.help.unban", locale))
+            lines.append(_t("admin.help.teleport", locale))
+            lines.append(_t("admin.help.unstuck", locale))
+            lines.append(_t("admin.help.tptoplayer", locale))
+            lines.append(_t("admin.help.fixcar", locale))
+            lines.append(_t("admin.help.save", locale))
+            lines.append(_t("admin.help.restart", locale))
+            lines.append(_t("admin.help.quickrestart", locale))
+            lines.append(_t("admin.help.restartnow", locale))
+            lines.append(_t("admin.help.cancelrestart", locale))
+            lines.append(_t("admin.help.shutdown", locale))
+            plain += " | " + _t("admin.plain.help", locale)
+
         embed = discord.Embed(
             title=title,
             description="\n".join(lines),
             color=_COLOR_INFO,
         )
-
-        # RCON 純文字
-        plain = _t("cmd.plain.help", locale)
 
         return embed, plain
 

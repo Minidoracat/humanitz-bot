@@ -145,6 +145,94 @@ class PlayerIdentityService:
 
         return None
 
+    def resolve_player(self, query: str) -> list[PlayerIdentityInfo]:
+        """模糊搜尋玩家 — 回傳所有匹配的玩家身份列表。
+
+        搜尋優先順序：精確匹配 → Steam ID 精確 → 前綴匹配 → 子字串匹配 → Steam ID 前綴。
+        每個階段找到結果即返回，不繼續模糊搜尋。
+
+        Args:
+            query: 玩家名稱、部分名稱或 Steam ID
+
+        Returns:
+            匹配的 PlayerIdentityInfo 列表（可能為空）
+        """
+        if not query:
+            return []
+
+        query_lower = query.lower()
+
+        # 1. 玩家名稱精確匹配（大小寫不敏感）
+        exact: list[PlayerIdentityInfo] = []
+        for name_lower, steam_id in self._name_to_steam.items():
+            if name_lower == query_lower:
+                name = self._steam_to_name.get(steam_id, name_lower)
+                exact.append(PlayerIdentityInfo(
+                    steam_id=steam_id, player_name=name,
+                    eos_id=self._get_eos_id(steam_id),
+                ))
+        if exact:
+            return exact
+
+        # 2. Steam ID 精確匹配
+        if query in self._steam_to_name:
+            name = self._steam_to_name[query]
+            return [PlayerIdentityInfo(
+                steam_id=query, player_name=name,
+                eos_id=self._get_eos_id(query),
+            )]
+
+        # 3. 玩家名稱前綴匹配
+        prefix: list[PlayerIdentityInfo] = []
+        for name_lower, steam_id in self._name_to_steam.items():
+            if name_lower.startswith(query_lower):
+                name = self._steam_to_name.get(steam_id, name_lower)
+                prefix.append(PlayerIdentityInfo(
+                    steam_id=steam_id, player_name=name,
+                    eos_id=self._get_eos_id(steam_id),
+                ))
+        if prefix:
+            return prefix
+
+        # 4. 玩家名稱子字串匹配
+        substring: list[PlayerIdentityInfo] = []
+        for name_lower, steam_id in self._name_to_steam.items():
+            if query_lower in name_lower:
+                name = self._steam_to_name.get(steam_id, name_lower)
+                substring.append(PlayerIdentityInfo(
+                    steam_id=steam_id, player_name=name,
+                    eos_id=self._get_eos_id(steam_id),
+                ))
+        if substring:
+            return substring
+
+        # 5. Steam ID 前綴匹配
+        steam_prefix: list[PlayerIdentityInfo] = []
+        for steam_id, name in self._steam_to_name.items():
+            if steam_id.startswith(query):
+                steam_prefix.append(PlayerIdentityInfo(
+                    steam_id=steam_id, player_name=name,
+                    eos_id=self._get_eos_id(steam_id),
+                ))
+        return steam_prefix
+
+    def _get_eos_id(self, steam_id: str) -> str:
+        """從 SQLite 取得 eos_id（快取中未儲存）。"""
+        try:
+            with self._db._lock:
+                conn = self._db._get_conn()
+                try:
+                    row = conn.execute(
+                        "SELECT eos_id FROM player_identity WHERE steam_id = ?",
+                        (steam_id,),
+                    ).fetchone()
+                finally:
+                    conn.close()
+            if row is not None:
+                return row["eos_id"] or ""
+        except Exception:
+            pass
+        return ""
     @property
     def known_count(self) -> int:
         """已知的玩家身份數量。"""

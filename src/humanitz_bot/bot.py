@@ -67,6 +67,15 @@ async def create_bot(settings: Settings) -> commands.Bot:
     else:
         logger.info("Game commands disabled via ENABLE_GAME_COMMANDS=false")
 
+    # 載入管理員指令 cog（有設定管理員 ID 時啟用）
+    if settings.admin_discord_ids or settings.admin_game_ids:
+        try:
+            await bot.load_extension("humanitz_bot.cogs.admin_commands")
+            logger.info("Loaded cog: humanitz_bot.cogs.admin_commands")
+        except Exception as e:
+            logger.warning("Failed to load optional cog admin_commands: %s", e)
+    else:
+        logger.info("Admin commands disabled (no ADMIN_DISCORD_IDS or ADMIN_GAME_IDS configured)")
     logger.info("Bot initialization complete")
 
     return bot

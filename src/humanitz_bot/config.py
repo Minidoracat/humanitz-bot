@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -57,6 +57,9 @@ class Settings:
     save_json_path: str = "/tmp/main_save.json"
     save_parse_interval: int = 300  # seconds, 0 = disabled
     save_parse_cooldown: int = 60   # min seconds between on-demand parses
+    # 管理員設定（選用）
+    admin_discord_ids: list[str] = field(default_factory=list)
+    admin_game_ids: list[str] = field(default_factory=list)
 
     @classmethod
     def from_env(cls, env_path: str | None = None) -> Settings:
@@ -156,6 +159,8 @@ class Settings:
         save_json_path = os.getenv("SAVE_JSON_PATH", "/tmp/main_save.json").strip()
         save_parse_interval_str = os.getenv("SAVE_PARSE_INTERVAL", "300").strip()
         save_parse_cooldown_str = os.getenv("SAVE_PARSE_COOLDOWN", "60").strip()
+        admin_discord_ids_str = os.getenv("ADMIN_DISCORD_IDS", "").strip()
+        admin_game_ids_str = os.getenv("ADMIN_GAME_IDS", "").strip()
 
         # 類型轉換
         try:
@@ -176,6 +181,18 @@ class Settings:
             save_parse_cooldown = int(save_parse_cooldown_str)
         except ValueError as e:
             raise ValueError(f"Configuration type conversion error: {e}")
+
+        # 管理員 ID 解析（逗號分隔字串 → list）
+        admin_discord_ids = [x.strip() for x in admin_discord_ids_str.split(",") if x.strip()]
+        admin_game_ids = [x.strip() for x in admin_game_ids_str.split(",") if x.strip()]
+
+        # 管理員 ID 格式驗證（應為純數字）
+        for aid in admin_discord_ids:
+            if not aid.isdigit():
+                logger.warning("Invalid ADMIN_DISCORD_IDS entry (not numeric): %r — will never match", aid)
+        for aid in admin_game_ids:
+            if not aid.isdigit():
+                logger.warning("Invalid ADMIN_GAME_IDS entry (not numeric): %r — will never match", aid)
 
         # 值域驗證 (O4 + O17)
         _VALID_LOCALES = {"en", "zh-TW"}
@@ -238,4 +255,6 @@ class Settings:
             save_json_path=save_json_path,
             save_parse_interval=save_parse_interval,
             save_parse_cooldown=save_parse_cooldown,
+            admin_discord_ids=admin_discord_ids,
+            admin_game_ids=admin_game_ids,
         )
