@@ -430,9 +430,8 @@ class AdminCommandsCog(commands.Cog):
             is_admin = await self.check_game_admin(player_name)
 
         if not is_admin:
-            # 對非管理員不揭露管理指令的存在
+            logger.debug("Admin permission denied: source=%s, player=%s", source, player_name)
             return False
-        logger.debug("Admin permission denied: source=%s, player=%s", source, player_name)
 
         # 冷卻檢查
         cooldown_key = str(message.author.id) if message is not None else player_name
@@ -488,8 +487,8 @@ class AdminCommandsCog(commands.Cog):
             except Exception:
                 logger.exception("Failed to send error feedback for: %s", cmd_name)
 
-        return True
         logger.info("Admin command completed: %s (by %s via %s)", cmd_name, player_name if source == 'game' else getattr(message, 'author', '?'), source)
+        return True
 
     # --- 玩家管理指令 ---
 
