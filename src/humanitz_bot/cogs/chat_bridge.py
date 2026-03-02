@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-
 import logging
 import re
+from pathlib import Path
 
 import discord
 from discord.ext import commands, tasks
 
 from humanitz_bot.services.database import Database
 from humanitz_bot.services.rcon_service import RconService
-from humanitz_bot.utils.chat_parser import ChatDiffer, ChatEvent, ChatEventType
+from humanitz_bot.utils.chat_parser import (
+    ChatDiffer,
+    ChatEvent,
+    ChatEventType,
+    ChatLogTailer,
+)
 from humanitz_bot.utils.i18n import t
 
 _SESSION_EVENT_TYPES = frozenset(
@@ -42,9 +47,29 @@ class ChatBridgeCog(commands.Cog):
 
         self.chat_channel_id: int = settings.chat_channel_id
         self.chat_poll_interval: int = settings.chat_poll_interval
-        self.chat_differ = ChatDiffer()
 
-        # 獨立 RCON 連線 — fetchchat + Discord→遊戲轉發，不與 status loop 爭搶鎖
+        # 模式選擇：HZLOGS_PATH 有設定且 Chat 子目錄存在 → 檔案模式，否則 → RCON 模式
+        self._file_mode: bool = False
+        self._tailer: ChatLogTailer | None = None
+        self._differ: ChatDiffer | None = None
+
+        if settings.hzlogs_path:
+            chat_dir = Path(settings.hzlogs_path) / "Chat"
+            if chat_dir.is_dir():
+                self._tailer = ChatLogTailer(chat_dir)
+                self._file_mode = True
+                logger.info("Chat bridge: file mode (reading %s)", chat_dir)
+            else:
+                logger.warning(
+                    "HZLOGS_PATH set but Chat/ subdirectory not found: %s — falling back to RCON",
+                    chat_dir,
+                )
+
+        if not self._file_mode:
+            self._differ = ChatDiffer()
+            logger.info("Chat bridge: RCON mode (fetchchat)")
+
+        # RCON 連線 — 檔案模式也需要（Discord→遊戲轉發用）
         self._rcon = RconService(
             settings.rcon_host, settings.rcon_port, settings.rcon_password
         )
@@ -64,8 +89,11 @@ class ChatBridgeCog(commands.Cog):
         if not self.poll_chat.is_running():
             self.poll_chat.change_interval(seconds=self.chat_poll_interval)
             self.poll_chat.start()
+            mode = "file" if self._file_mode else "RCON"
             logger.info(
-                "Chat bridge poll loop started (interval=%ds)", self.chat_poll_interval
+                "Chat bridge poll loop started (mode=%s, interval=%ds)",
+                mode,
+                self.chat_poll_interval,
             )
 
     async def cog_unload(self) -> None:
@@ -75,44 +103,70 @@ class ChatBridgeCog(commands.Cog):
     @tasks.loop(seconds=10)
     async def poll_chat(self) -> None:
         try:
-            rcon = self._get_rcon()
-            chat_raw = await rcon.execute("fetchchat")
-
-            if not chat_raw:
-                return
-
-            new_events = self.chat_differ.get_new_events(chat_raw)
-
-            if not new_events:
-                return
-
-            channel = self.bot.get_channel(self.chat_channel_id)
-            if not isinstance(channel, discord.TextChannel):
-                logger.error(
-                    "Chat channel not found or wrong type: %d", self.chat_channel_id
-                )
-                return
-
-            db = self._get_db()
-            for event in new_events:
-                if db and event.event_type != ChatEventType.UNKNOWN:
-                    await asyncio.to_thread(self._log_event, db, event)
-
-                # 偵測遊戲內指令（! 前綴）
-                if (
-                    event.event_type == ChatEventType.PLAYER_CHAT
-                    and event.message.startswith(_COMMAND_PREFIX)
-                ):
-                    await self._route_game_command(
-                        event.player_name, event.message, channel, "game"
-                    )
-                    continue
-
-                msg = self._format_event(event)
-                if msg:
-                    await channel.send(msg)
+            if self._file_mode:
+                await self._poll_file()
+            else:
+                await self._poll_rcon()
         except Exception:
             logger.exception("Chat poll failed")
+
+    async def _poll_file(self) -> None:
+        """檔案模式：從 HZLogs/Chat/ 讀取新事件。"""
+        if self._tailer is None:
+            return
+
+        new_events = await asyncio.to_thread(self._tailer.get_new_events)
+
+        if not new_events:
+            return
+
+        await self._dispatch_events(new_events)
+
+    async def _poll_rcon(self) -> None:
+        """RCON 模式：透過 fetchchat 取得新事件。"""
+        if self._differ is None:
+            return
+
+        rcon = self._get_rcon()
+        chat_raw = await rcon.execute("fetchchat")
+
+        if not chat_raw:
+            return
+
+        new_events = self._differ.get_new_events(chat_raw)
+
+        if not new_events:
+            return
+
+        await self._dispatch_events(new_events)
+
+    async def _dispatch_events(self, new_events: list[ChatEvent]) -> None:
+        """處理事件分發（記錄、指令路由、發送到 Discord）。"""
+        channel = self.bot.get_channel(self.chat_channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            logger.error(
+                "Chat channel not found or wrong type: %d", self.chat_channel_id
+            )
+            return
+
+        db = self._get_db()
+        for event in new_events:
+            if db and event.event_type != ChatEventType.UNKNOWN:
+                await asyncio.to_thread(self._log_event, db, event)
+
+            # 偵測遊戲內指令（! 前綴）
+            if (
+                event.event_type == ChatEventType.PLAYER_CHAT
+                and event.message.startswith(_COMMAND_PREFIX)
+            ):
+                await self._route_game_command(
+                    event.player_name, event.message, channel, "game"
+                )
+                continue
+
+            msg = self._format_event(event)
+            if msg:
+                await channel.send(msg)
 
     @poll_chat.before_loop
     async def before_poll_chat(self) -> None:
@@ -134,7 +188,7 @@ class ChatBridgeCog(commands.Cog):
     @staticmethod
     def _format_event(event: ChatEvent) -> str | None:
         # Skip admin messages to prevent echo loop:
-        # Discord → RCON admin → fetchchat → back to Discord
+        # Discord → RCON admin → fetchchat/file → back to Discord
         if event.event_type == ChatEventType.ADMIN_MESSAGE:
             return None
 
@@ -218,13 +272,17 @@ class ChatBridgeCog(commands.Cog):
                 if handled:
                     return
             except Exception:
-                logger.exception("Admin command failed (not falling through): %s", command_text)
+                logger.exception(
+                    "Admin command failed (not falling through): %s", command_text
+                )
                 return  # 管理指令失敗時終止路由，不再 fallthrough 到一般指令
 
         # 落入一般遊戲指令
         game_cmd_cog = self.bot.get_cog("GameCommandsCog")
         if game_cmd_cog is None:
-            logger.debug("GameCommandsCog not loaded, ignoring command: %s", command_text)
+            logger.debug(
+                "GameCommandsCog not loaded, ignoring command: %s", command_text
+            )
             return
 
         try:
@@ -237,6 +295,7 @@ class ChatBridgeCog(commands.Cog):
             )
         except Exception:
             logger.exception("Failed to handle game command: %s", command_text)
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(ChatBridgeCog(bot))

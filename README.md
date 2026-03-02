@@ -45,7 +45,7 @@ src/humanitz_bot/
 │   ├── save_service.py  # Save file parsing orchestration + query API
 │   └── system_stats.py  # CPU, memory, disk, network via psutil
 └── utils/
-    ├── chat_parser.py   # fetchchat markup parser + dedup differ
+    ├── chat_parser.py   # Chat event parser (RCON + file format) with dedup differ and file tailer
     ├── formatters.py    # Progress bars, duration, emoji maps
     └── i18n.py          # en + zh-TW translations
 ```
@@ -98,7 +98,8 @@ Edit `.env` and fill in your values:
 | `SHOW_DEATH_COUNT` | | Show player death count in embed (default: `true`) |
 | `DEATH_COUNT_HOURS` | | Time window in hours for death count (default: `24`) |
 | `LOCALE` | | `en` or `zh-TW` (default: `en`) |
-| `PLAYER_LOG_PATH` | | Path to `PlayerConnectedLog.txt` |
+| `HZLOGS_PATH` | | Path to HZLogs root directory (1.02+). Enables file-based chat bridge and auto-configures Login path |
+| `PLAYER_LOG_PATH` | | [Deprecated] Path to `PlayerConnectedLog.txt` |
 | `ENABLE_GAME_COMMANDS` | | Enable in-game `!` commands with save file parsing (default: `true`) |
 | `SAVE_FILE_PATH` | | Path to `Save_DedicatedSaveMP.sav` (auto-detected if not set) |
 | `SAVE_JSON_PATH` | | Path for uesave JSON output (default: `/tmp/main_save.json`) |

@@ -45,7 +45,7 @@ src/humanitz_bot/
 │   ├── save_service.py  # 存檔解析排程 + 查詢 API
 │   └── system_stats.py  # CPU、記憶體、磁碟、網路（psutil）
 └── utils/
-    ├── chat_parser.py   # fetchchat 標記解析器 + 去重比對
+    ├── chat_parser.py   # 聊天事件解析器（RCON + 檔案格式），含去重比對與檔案追蹤
     ├── formatters.py    # 進度條、時長格式、emoji 對照表
     └── i18n.py          # en + zh-TW 翻譯字串
 ```
@@ -98,7 +98,8 @@ cp .env.example .env
 | `SHOW_DEATH_COUNT` | | 是否顯示玩家死亡次數（預設：`true`） |
 | `DEATH_COUNT_HOURS` | | 死亡統計的時間範圍，單位小時（預設：`24`） |
 | `LOCALE` | | `en` 或 `zh-TW`（預設：`en`） |
-| `PLAYER_LOG_PATH` | | `PlayerConnectedLog.txt` 檔案路徑 |
+| `HZLOGS_PATH` | | HZLogs 根目錄路徑（1.02+）。啟用檔案模式聊天橋接並自動設定 Login 路徑 |
+| `PLAYER_LOG_PATH` | | 【已棄用】`PlayerConnectedLog.txt` 檔案路徑 |
 | `ENABLE_GAME_COMMANDS` | | 啟用遊戲內 `!` 指令與存檔解析功能（預設：`true`） |
 | `SAVE_FILE_PATH` | | `Save_DedicatedSaveMP.sav` 路徑（未設定則自動偵測） |
 | `SAVE_JSON_PATH` | | uesave JSON 輸出路徑（預設：`/tmp/main_save.json`） |

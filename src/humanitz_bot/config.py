@@ -51,6 +51,7 @@ class Settings:
     log_level: str = "INFO"
     log_retention_days: int = 7
     player_log_path: str = "PlayerConnectedLog.txt"
+    hzlogs_path: str = ""  # 空 = 使用 player_log_path（向後相容）
     # 存檔解析設定（選用）
     enable_game_commands: bool = True
     save_file_path: str = ""  # 空 = 自動偵測預設路徑
@@ -150,6 +151,7 @@ class Settings:
             "PLAYER_LOG_PATH",
             "PlayerConnectedLog.txt",
         ).strip()
+        hzlogs_path = os.getenv("HZLOGS_PATH", "").strip()
         enable_game_commands = os.getenv("ENABLE_GAME_COMMANDS", "true").strip().lower() in (
             "true",
             "1",
@@ -227,6 +229,20 @@ class Settings:
                     f"Invalid SAVE_PARSE_COOLDOWN: {save_parse_cooldown}. Must be >= 10"
                 )
 
+        # HZLOGS_PATH 目錄驗證
+        if hzlogs_path:
+            _hzlogs_dir = Path(hzlogs_path)
+            if not _hzlogs_dir.is_dir():
+                logger.warning(
+                    "HZLOGS_PATH directory not found: %s — falling back to PLAYER_LOG_PATH",
+                    hzlogs_path,
+                )
+                hzlogs_path = ""
+            else:
+                # 自動衍生 player_log_path（向後相容）
+                _login_dir = _hzlogs_dir / "Login"
+                if _login_dir.is_dir():
+                    player_log_path = str(_login_dir)
         return cls(
             discord_token=discord_token,
             rcon_host=rcon_host,
@@ -250,6 +266,7 @@ class Settings:
             log_level=log_level,
             log_retention_days=log_retention_days,
             player_log_path=player_log_path,
+            hzlogs_path=hzlogs_path,
             enable_game_commands=enable_game_commands,
             save_file_path=save_file_path,
             save_json_path=save_json_path,
