@@ -233,26 +233,29 @@ class PlayerIdentityService:
         except Exception:
             pass
         return ""
+
     @property
     def known_count(self) -> int:
         """已知的玩家身份數量。"""
         return len(self._steam_to_name)
 
     def import_from_connected_log(self, log_path: str) -> int:
-        """從 PlayerConnectedLog.txt 匯入歷史玩家身份對應。
+        """從連線日誌匯入歷史玩家身份對應（支援單一檔案或多檔目錄）。
 
         解析每一行 Connected/Disconnected 記錄，擷取 name↔SteamID↔EosID 並寫入
-        記憶體快取與 SQLite。相同 SteamID 會取最新的名稱（檔案尾端 = 最新）。
+        記憶體快取與 SQLite。相同 SteamID 會取最新的名稱（檔案順序由舊到新）。
 
         Args:
-            log_path: PlayerConnectedLog.txt 的檔案路徑
+            log_path: 單一日誌檔路徑或包含 *_ConnectLog.txt 的目錄路徑
 
         Returns:
             匯入的不重複玩家數量
         """
-        path = Path(log_path)
-        if not path.exists():
-            logger.warning("PlayerConnectedLog not found: %s", path)
+        from humanitz_bot.services.player_tracker import resolve_connect_logs
+
+        log_files = resolve_connect_logs(log_path)
+        if not log_files:
+            logger.warning("No connection logs found: %s", log_path)
             return 0
 
         # 匹配: Player Connected/Disconnected <name> NetID(<steam64>_+_|<eosid>) (<date>)
@@ -261,28 +264,28 @@ class PlayerIdentityService:
             r"NetID\((\d+)_\+_\|([a-fA-F0-9]+)\)"
         )
 
-        # 收集所有 steam_id → (name, eos_id)，後面的行會覆蓋前面的（取最新名稱）
+        # 收集所有 steam_id → (name, eos_id)，從舊到新疊代，後面的檔案會覆蓋前面的（取最新名稱）
         identities: dict[str, tuple[str, str]] = {}
 
-        try:
-            with open(path, encoding="utf-8", errors="replace") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    m = pattern.match(line)
-                    if not m:
-                        continue
-                    name = m.group(1)
-                    steam_id = m.group(2)
-                    eos_id = m.group(3)
-                    identities[steam_id] = (name, eos_id)
-        except OSError as e:
-            logger.error("Failed to read PlayerConnectedLog: %s", e)
-            return 0
+        for log_file in log_files:
+            try:
+                with open(log_file, encoding="utf-8", errors="replace") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        m = pattern.match(line)
+                        if not m:
+                            continue
+                        name = m.group(1)
+                        steam_id = m.group(2)
+                        eos_id = m.group(3)
+                        identities[steam_id] = (name, eos_id)
+            except OSError as e:
+                logger.error("Failed to read connection log %s: %s", log_file, e)
 
         if not identities:
-            logger.info("No player identities found in log file")
+            logger.info("No player identities found in connection logs")
             return 0
 
         # 批次寫入快取與 DB
@@ -307,7 +310,7 @@ class PlayerIdentityService:
                 logger.exception("Failed to import identity: %s (%s)", name, steam_id)
 
         logger.info(
-            "Imported %d player identities from PlayerConnectedLog (%d total known)",
+            "Imported %d player identities from connection logs (%d total known)",
             imported,
             self.known_count,
         )

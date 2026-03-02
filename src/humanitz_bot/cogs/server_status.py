@@ -89,9 +89,9 @@ class ServerStatusCog(commands.Cog):
         self._identity_loaded: bool = False
         self._load_state()
         self._player_log_path: str = settings.player_log_path
-        # PlayerIDMapped.txt 與 PlayerConnectedLog.txt 在同一目錄（LGSM 標準）
-        mapped_path = Path(settings.player_log_path).parent / "PlayerIDMapped.txt"
-        self._player_id_mapped_path: str = str(mapped_path)
+        # PlayerIDMapped.txt: search upward from log path (supports both old and new structures)
+        self._player_id_mapped_path: str = self._find_mapped_file(settings.player_log_path)
+        mapped_path = Path(self._player_id_mapped_path)
         if not mapped_path.exists():
             logger.warning(
                 "PlayerIDMapped.txt not found at %s — player name resolution may be limited",
@@ -305,6 +305,22 @@ class ServerStatusCog(commands.Cog):
         )
 
         return embed
+
+    @staticmethod
+    def _find_mapped_file(log_path: str) -> str:
+        """從日誌路徑向上搜尋 PlayerIDMapped.txt。"""
+        p = Path(log_path)
+        search_root = p if p.is_dir() else p.parent
+        for _ in range(4):
+            candidate = search_root / "PlayerIDMapped.txt"
+            if candidate.exists():
+                return str(candidate)
+            if search_root == search_root.parent:
+                break  # reached filesystem root
+            search_root = search_root.parent
+        # Fallback to old behavior
+        fallback = Path(log_path).parent / "PlayerIDMapped.txt"
+        return str(fallback)
 
     @staticmethod
     def _format_player_columns(
