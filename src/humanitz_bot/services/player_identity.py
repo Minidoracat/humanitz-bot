@@ -145,11 +145,17 @@ class PlayerIdentityService:
 
         return None
 
+    @staticmethod
+    def _normalize_ws(s: str) -> str:
+        """將連續空白壓縮為單一空格，用於寬鬆比對。"""
+        return re.sub(r"\s+", " ", s).strip()
+
     def resolve_player(self, query: str) -> list[PlayerIdentityInfo]:
         """模糊搜尋玩家 — 回傳所有匹配的玩家身份列表。
 
         搜尋優先順序：精確匹配 → Steam ID 精確 → 前綴匹配 → 子字串匹配 → Steam ID 前綴。
         每個階段找到結果即返回，不繼續模糊搜尋。
+        名稱比對時會將連續空白正規化，以避免多空格名稱無法匹配。
 
         Args:
             query: 玩家名稱、部分名稱或 Steam ID
@@ -161,11 +167,12 @@ class PlayerIdentityService:
             return []
 
         query_lower = query.lower()
+        query_norm = self._normalize_ws(query_lower)
 
-        # 1. 玩家名稱精確匹配（大小寫不敏感）
+        # 1. 玩家名稱精確匹配（大小寫不敏感，空白正規化）
         exact: list[PlayerIdentityInfo] = []
         for name_lower, steam_id in self._name_to_steam.items():
-            if name_lower == query_lower:
+            if name_lower == query_lower or self._normalize_ws(name_lower) == query_norm:
                 name = self._steam_to_name.get(steam_id, name_lower)
                 exact.append(PlayerIdentityInfo(
                     steam_id=steam_id, player_name=name,
@@ -185,7 +192,8 @@ class PlayerIdentityService:
         # 3. 玩家名稱前綴匹配
         prefix: list[PlayerIdentityInfo] = []
         for name_lower, steam_id in self._name_to_steam.items():
-            if name_lower.startswith(query_lower):
+            name_norm = self._normalize_ws(name_lower)
+            if name_lower.startswith(query_lower) or name_norm.startswith(query_norm):
                 name = self._steam_to_name.get(steam_id, name_lower)
                 prefix.append(PlayerIdentityInfo(
                     steam_id=steam_id, player_name=name,
@@ -197,7 +205,8 @@ class PlayerIdentityService:
         # 4. 玩家名稱子字串匹配
         substring: list[PlayerIdentityInfo] = []
         for name_lower, steam_id in self._name_to_steam.items():
-            if query_lower in name_lower:
+            name_norm = self._normalize_ws(name_lower)
+            if query_lower in name_lower or query_norm in name_norm:
                 name = self._steam_to_name.get(steam_id, name_lower)
                 substring.append(PlayerIdentityInfo(
                     steam_id=steam_id, player_name=name,
