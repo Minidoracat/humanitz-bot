@@ -52,12 +52,14 @@ class Settings:
     log_retention_days: int = 7
     player_log_path: str = "PlayerConnectedLog.txt"
     hzlogs_path: str = ""  # 空 = 使用 player_log_path（向後相容）
-    # 存檔解析設定（選用）
+    # 存檔快取設定（選用）
     enable_game_commands: bool = True
-    save_file_path: str = ""  # 空 = 自動偵測預設路徑
-    save_json_path: str = "/tmp/main_save.json"
-    save_parse_interval: int = 300  # seconds, 0 = disabled
-    save_parse_cooldown: int = 60   # min seconds between on-demand parses
+    save_cache_path: str = "tmp/save-cache-lite.json"
+    save_cache_max_age: int = 21600  # seconds; low-frequency external cache
+    save_file_path: str = ""  # legacy; used by external cache scripts only
+    save_json_path: str = ""  # legacy; bot no longer creates huge JSON
+    save_parse_interval: int = 0  # legacy; bot-side parsing disabled
+    save_parse_cooldown: int = 0  # legacy; bot-side parsing disabled
     # 管理員設定（選用）
     admin_discord_ids: list[str] = field(default_factory=list)
     admin_game_ids: list[str] = field(default_factory=list)
@@ -158,9 +160,13 @@ class Settings:
             "yes",
         )
         save_file_path = os.getenv("SAVE_FILE_PATH", "").strip()
-        save_json_path = os.getenv("SAVE_JSON_PATH", "/tmp/main_save.json").strip()
-        save_parse_interval_str = os.getenv("SAVE_PARSE_INTERVAL", "300").strip()
-        save_parse_cooldown_str = os.getenv("SAVE_PARSE_COOLDOWN", "60").strip()
+        save_cache_path = os.getenv(
+            "SAVE_CACHE_PATH", "tmp/save-cache-lite.json"
+        ).strip()
+        save_cache_max_age_str = os.getenv("SAVE_CACHE_MAX_AGE", "21600").strip()
+        save_json_path = os.getenv("SAVE_JSON_PATH", "").strip()
+        save_parse_interval_str = os.getenv("SAVE_PARSE_INTERVAL", "0").strip()
+        save_parse_cooldown_str = os.getenv("SAVE_PARSE_COOLDOWN", "0").strip()
         admin_discord_ids_str = os.getenv("ADMIN_DISCORD_IDS", "").strip()
         admin_game_ids_str = os.getenv("ADMIN_GAME_IDS", "").strip()
 
@@ -179,6 +185,7 @@ class Settings:
             death_count_hours = int(death_count_hours_str)
             db_retention_days = int(db_retention_days_str)
             log_retention_days = int(log_retention_days_str)
+            save_cache_max_age = int(save_cache_max_age_str)
             save_parse_interval = int(save_parse_interval_str)
             save_parse_cooldown = int(save_parse_cooldown_str)
         except ValueError as e:
@@ -220,13 +227,25 @@ class Settings:
                 f"Invalid DB_RETENTION_DAYS: {db_retention_days}. Must be >= 1"
             )
         if enable_game_commands:
-            if save_parse_interval > 0 and save_parse_interval < 60:
+            if save_cache_max_age < 300:
                 raise SystemExit(
-                    f"Invalid SAVE_PARSE_INTERVAL: {save_parse_interval}. Must be >= 60 (or 0 to disable)"
+                    f"Invalid SAVE_CACHE_MAX_AGE: {save_cache_max_age}. Must be >= 300"
                 )
-            if save_parse_cooldown < 10:
+            if save_parse_interval != 0:
+                logger.warning(
+                    "SAVE_PARSE_INTERVAL is ignored; bot-side save parsing is disabled"
+                )
+            if save_parse_cooldown != 0:
+                logger.warning(
+                    "SAVE_PARSE_COOLDOWN is ignored; bot-side save parsing is disabled"
+                )
+            if save_json_path:
+                logger.warning(
+                    "SAVE_JSON_PATH is ignored; bot no longer creates uesave JSON"
+                )
+            if not save_cache_path:
                 raise SystemExit(
-                    f"Invalid SAVE_PARSE_COOLDOWN: {save_parse_cooldown}. Must be >= 10"
+                    "Invalid SAVE_CACHE_PATH: must not be empty when game commands are enabled"
                 )
 
         # HZLOGS_PATH 目錄驗證
@@ -268,6 +287,8 @@ class Settings:
             player_log_path=player_log_path,
             hzlogs_path=hzlogs_path,
             enable_game_commands=enable_game_commands,
+            save_cache_path=save_cache_path,
+            save_cache_max_age=save_cache_max_age,
             save_file_path=save_file_path,
             save_json_path=save_json_path,
             save_parse_interval=save_parse_interval,

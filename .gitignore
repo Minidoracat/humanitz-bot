@@ -14,6 +14,8 @@ wheels/
 
 # Project-specific
 tmp/*.png
+tmp/save-cache-lite.json
+tmp/save-cache-lite.lock
 data/*.json
 data/*.db
 data/*.db-wal

@@ -17,7 +17,7 @@
 - **🗄️ SQLite 資料庫** — 持久化儲存玩家人數歷史、聊天記錄、上下線事件，含自動資料清理
 - **🌐 多語系支援** — 英文與繁體中文介面
 - **📝 日誌輪替** — 按日分檔，可設定保留天數
-- **🎮 遊戲指令（可選）** — 透過 [uesave](https://github.com/trumank/uesave-rs) 解析存檔，支援遊戲內 `!` 指令查詢。玩家可查詢座標、生存狀態、排行榜、伺服器狀態及說明。支援英文與中文別名。回應同時顯示在 Discord 和遊戲內。可透過 `ENABLE_GAME_COMMANDS` 開關此功能。
+- **🎮 遊戲指令（可選）** — 透過低頻產生的輕量存檔快取支援遊戲內 `!` 指令查詢。玩家可查詢座標、生存狀態、排行榜、伺服器狀態及說明。支援英文與中文別名。回應同時顯示在 Discord 和遊戲內。可透過 `ENABLE_GAME_COMMANDS` 開關此功能。
 
 ## 截圖預覽
 
@@ -31,7 +31,7 @@ src/humanitz_bot/
 ├── bot.py               # Discord bot 初始化、Cog 載入
 ├── config.py            # 從 .env 載入設定並驗證
 ├── rcon_client.py       # Source RCON 協議（針對 HumanitZ 最佳化）
-├── save_extractor.py    # 子程序：從 uesave JSON 提取玩家資料
+├── save_extractor.py    # 舊版子程序：從 uesave JSON 提取玩家資料
 ├── cogs/
 │   ├── server_status.py # 狀態 Embed 自動更新（預設 30 秒）
 │   ├── chat_bridge.py   # 聊天橋接輪詢 + 遊戲指令路由
@@ -42,7 +42,8 @@ src/humanitz_bot/
 │   ├── chart_service.py # Matplotlib 圖表生成
 │   ├── player_tracker.py# 從 PlayerConnectedLog.txt 計算在線時長
 │   ├── player_identity.py# 玩家名稱 ↔ SteamID 對應
-│   ├── save_service.py  # 存檔解析排程 + 查詢 API
+│   ├── save_cache.py    # 輕量存檔快取讀取器，供遊戲指令查詢
+│   ├── save_service.py  # 舊版 uesave 解析器，Bot 主循環不再使用
 │   └── system_stats.py  # CPU、記憶體、磁碟、網路（psutil）
 └── utils/
     ├── chat_parser.py   # 聊天事件解析器（RCON + 檔案格式），含去重比對與檔案追蹤
@@ -100,11 +101,13 @@ cp .env.example .env
 | `LOCALE` | | `en` 或 `zh-TW`（預設：`en`） |
 | `HZLOGS_PATH` | | HZLogs 根目錄路徑（1.02+）。啟用檔案模式聊天橋接並自動設定 Login 路徑 |
 | `PLAYER_LOG_PATH` | | 【已棄用】`PlayerConnectedLog.txt` 檔案路徑 |
-| `ENABLE_GAME_COMMANDS` | | 啟用遊戲內 `!` 指令與存檔解析功能（預設：`true`） |
-| `SAVE_FILE_PATH` | | `Save_DedicatedSaveMP.sav` 路徑（未設定則自動偵測） |
-| `SAVE_JSON_PATH` | | uesave JSON 輸出路徑（預設：`/tmp/main_save.json`） |
-| `SAVE_PARSE_INTERVAL` | | 排程存檔解析間隔秒數（預設：`300`） |
-| `SAVE_PARSE_COOLDOWN` | | 指令觸發解析的最小冷卻秒數（預設：`60`） |
+| `ENABLE_GAME_COMMANDS` | | 啟用遊戲內 `!` 指令，資料來源為輕量存檔快取（預設：`true`） |
+| `SAVE_CACHE_PATH` | | Bot 讀取的精簡快取 JSON（預設：`tmp/save-cache-lite.json`） |
+| `SAVE_CACHE_MAX_AGE` | | 指令可接受的快取最長年齡，單位秒（預設：`21600`） |
+| `SAVE_FILE_PATH` | | `scripts/run-save-cache-lite.sh` 產生快取時使用的 `.sav` 路徑 |
+| `SAVE_JSON_PATH` | | 舊版設定，已忽略。Bot 內部不再產生 uesave 大 JSON |
+| `SAVE_PARSE_INTERVAL` | | 舊版設定，已忽略。請設為 `0` |
+| `SAVE_PARSE_COOLDOWN` | | 舊版設定，已忽略。請設為 `0` |
 
 完整選項請參考 [`.env.example`](.env.example)，亦提供[繁體中文版](.env.example.zh-TW)。
 
@@ -145,23 +148,17 @@ Bot 需要以下權限（intents）：
 
 ## 遊戲指令（可選）
 
-Bot 支援遊戲內 `!` 指令，透過解析存檔資料查詢玩家狀態。此功能需要安裝 [uesave](https://github.com/trumank/uesave-rs)。
+Bot 支援遊戲內 `!` 指令，透過精簡快取查詢玩家狀態。Bot 主程序不會解析大型 `.sav`，也不會產生數 GB 的 uesave JSON；快取請由外部低頻排程產生，例如寶塔排程。
 
-### 安裝 uesave
+### 產生輕量快取
 
-```bash
-# 使用 cargo（Rust 套件管理器）
-cargo install uesave
-
-# 或從 GitHub Releases 下載預編譯二進位檔
-# https://github.com/trumank/uesave-rs/releases
-```
-
-確認安裝：
+將以下命令加入寶塔排程即可：
 
 ```bash
-uesave --version
+/home/hzserver/humanitz-bot/scripts/run-save-cache-lite.sh
 ```
+
+建議頻率先設每 6 小時一次。如果覺得 `!位置`、`!狀態`、`!排行` 資料太舊，再調整為每 3 小時；不建議使用 5 分鐘這類高頻排程。
 
 ### 可用指令
 
@@ -178,14 +175,15 @@ uesave --version
 
 ### 運作原理
 
-1. 定期透過 `uesave to-json` 子程序解析存檔（`.sav`）
-2. 獨立的提取子程序載入 JSON 並輸出精簡摘要（~166KB，原始 ~280MB）
-3. 提取的資料儲存在 SQLite 中供快速查詢
-4. Bot 主程序不會載入完整 JSON — 記憶體使用最佳化
+1. 寶塔排程低頻執行 `scripts/run-save-cache-lite.sh`
+2. 腳本使用 `flock` 防止重複執行，並用 `nice/ionice` 降低資源優先權
+3. `scripts/save-cache-lite.js` 只提取指令需要的玩家座標、狀態、排行榜與世界天數
+4. Bot 主程序只讀取 `SAVE_CACHE_PATH` 指向的精簡 JSON，不會執行 `.sav` 解析
+5. 快取超過 `SAVE_CACHE_MAX_AGE` 時，相關指令會提示快取尚未可用或已過期
 
 ### 停用遊戲指令
 
-在 `.env` 中設定 `ENABLE_GAME_COMMANDS=false` 即可完全停用此功能。停用時不需要安裝 uesave，Bot 其他功能正常運作。
+在 `.env` 中設定 `ENABLE_GAME_COMMANDS=false` 即可完全停用此功能。停用後 Bot 其他功能正常運作。
 
 
 ## RCON 協議筆記

@@ -42,7 +42,8 @@ src/humanitz_bot/
 │   ├── chart_service.py # Matplotlib chart generation
 │   ├── player_tracker.py# Online duration from PlayerConnectedLog.txt
 │   ├── player_identity.py# Player name ↔ SteamID mapping
-│   ├── save_service.py  # Save file parsing orchestration + query API
+│   ├── save_cache.py    # Compact save-cache reader for game commands
+│   ├── save_service.py  # Legacy uesave parser, no longer used by the bot loop
 │   └── system_stats.py  # CPU, memory, disk, network via psutil
 └── utils/
     ├── chat_parser.py   # Chat event parser (RCON + file format) with dedup differ and file tailer
@@ -100,11 +101,13 @@ Edit `.env` and fill in your values:
 | `LOCALE` | | `en` or `zh-TW` (default: `en`) |
 | `HZLOGS_PATH` | | Path to HZLogs root directory (1.02+). Enables file-based chat bridge and auto-configures Login path |
 | `PLAYER_LOG_PATH` | | [Deprecated] Path to `PlayerConnectedLog.txt` |
-| `ENABLE_GAME_COMMANDS` | | Enable in-game `!` commands with save file parsing (default: `true`) |
-| `SAVE_FILE_PATH` | | Path to `Save_DedicatedSaveMP.sav` (auto-detected if not set) |
-| `SAVE_JSON_PATH` | | Path for uesave JSON output (default: `/tmp/main_save.json`) |
-| `SAVE_PARSE_INTERVAL` | | Seconds between scheduled save parses (default: `300`) |
-| `SAVE_PARSE_COOLDOWN` | | Minimum seconds between on-demand parses (default: `60`) |
+| `ENABLE_GAME_COMMANDS` | | Enable in-game `!` commands backed by the lightweight save cache (default: `true`) |
+| `SAVE_CACHE_PATH` | | Compact cache JSON read by the bot (default: `tmp/save-cache-lite.json`) |
+| `SAVE_CACHE_MAX_AGE` | | Maximum accepted cache age in seconds (default: `21600`) |
+| `SAVE_FILE_PATH` | | Path used by `scripts/run-save-cache-lite.sh` to refresh the cache |
+| `SAVE_JSON_PATH` | | Legacy, ignored. Bot-side uesave JSON parsing is disabled |
+| `SAVE_PARSE_INTERVAL` | | Legacy, ignored. Set `0` |
+| `SAVE_PARSE_COOLDOWN` | | Legacy, ignored. Set `0` |
 
 See [`.env.example`](.env.example) for all options with detailed descriptions. A [Traditional Chinese version](.env.example.zh-TW) is also available.
 

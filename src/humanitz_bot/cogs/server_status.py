@@ -18,7 +18,6 @@ from humanitz_bot.services.player_identity import (
     PlayerIdentityInfo,
     PlayerIdentityService,
 )
-from humanitz_bot.services.save_service import SaveService
 from humanitz_bot.services.player_tracker import (
     format_duration as format_player_duration,
 )
@@ -62,13 +61,8 @@ class ServerStatusCog(commands.Cog):
             history_hours=settings.chart_history_hours,
         )
 
-        # 存檔解析與玩家身份服務
+        # 玩家身份服務。存檔快取由 GameCommandsCog 讀取；狀態循環不再解析 .sav。
         self.identity_service = PlayerIdentityService(self.db)
-        self.save_service = SaveService(
-            db=self.db,
-            save_file_path=settings.save_file_path,
-            save_json_path=settings.save_json_path,
-        )
 
         self.status_channel_id: int = settings.status_channel_id
         self.status_message_id: int | None = settings.status_message_id
@@ -83,8 +77,6 @@ class ServerStatusCog(commands.Cog):
         self._status_message: discord.Message | None = None
         self._last_result: FetchAllResult | None = None
         self._prune_counter: int = 0
-        self._save_parse_interval: int = settings.save_parse_interval
-        self._save_parse_counter: int = 0
         self._background_tasks: set[asyncio.Task[None]] = set()
         self._identity_loaded: bool = False
         self._load_state()
@@ -118,11 +110,6 @@ class ServerStatusCog(commands.Cog):
                 self._player_log_path,
             )
             self._identity_loaded = True
-
-            # 啟動時立即觸發首次存檔解析
-            if self.save_service.is_available and not self.save_service.is_parsing:
-                self._spawn_background(self._scheduled_parse())
-                logger.info("Initial save parse triggered on startup")
 
     def _spawn_background(self, coro: object) -> None:
         """建立背景 task 並自動清理引用，避免 GC 回收。"""
@@ -191,14 +178,6 @@ class ServerStatusCog(commands.Cog):
             if self._prune_counter >= 120:
                 self._prune_counter = 0
                 await asyncio.to_thread(self.db.prune_old_data)
-
-            # 排程存檔解析
-            if self._save_parse_interval > 0:
-                self._save_parse_counter += self._update_interval
-                if self._save_parse_counter >= self._save_parse_interval:
-                    self._save_parse_counter = 0
-                    if self.save_service.is_available and not self.save_service.is_parsing:
-                        self._spawn_background(self._scheduled_parse())
 
             logger.debug("Status embed updated")
         except Exception:
@@ -449,26 +428,6 @@ class ServerStatusCog(commands.Cog):
             self._status_message = await channel.send(embed=embed)
         logger.info("Created new status message: %d", self._status_message.id)
         self._save_state(self._status_message.id)
-
-    async def _scheduled_parse(self) -> None:
-        """排程存檔解析（在背景執行，不阻塞狀態更新循環）。"""
-        # 每次排程解析時順便重讀 PlayerIDMapped.txt（~700 行，成本幾乎為零）
-        try:
-            await asyncio.to_thread(
-                self.identity_service.import_from_mapped_file,
-                self._player_id_mapped_path,
-            )
-        except Exception:
-            logger.exception("Failed to re-import PlayerIDMapped.txt")
-
-        try:
-            success = await self.save_service.parse_save()
-            if success:
-                logger.info("Scheduled save parse completed successfully")
-            else:
-                logger.warning("Scheduled save parse failed")
-        except Exception:
-            logger.exception("Scheduled save parse error")
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(ServerStatusCog(bot))

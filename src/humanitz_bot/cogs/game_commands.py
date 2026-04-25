@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 import re
+import asyncio
 from datetime import datetime
 
 import discord
@@ -13,7 +13,7 @@ from discord.ext import commands
 
 from humanitz_bot.services.player_identity import PlayerIdentityService
 from humanitz_bot.services.rcon_service import RconService
-from humanitz_bot.services.save_service import SaveService
+from humanitz_bot.services.save_cache import SaveCacheService
 from humanitz_bot.utils.i18n import _STRINGS
 from humanitz_bot.utils import i18n
 
@@ -88,14 +88,15 @@ class GameCommandsCog(commands.Cog):
         self._rcon = RconService(
             settings.rcon_host, settings.rcon_port, settings.rcon_password
         )
+        self._save_cache = SaveCacheService(
+            settings.save_cache_path,
+            settings.save_cache_max_age,
+        )
         self._background_tasks: set[asyncio.Task[None]] = set()
 
-    def _get_save_service(self) -> SaveService | None:
-        """從 ServerStatusCog 取得 SaveService 實例。"""
-        status_cog = self.bot.get_cog("ServerStatusCog")
-        if status_cog is not None:
-            return getattr(status_cog, "save_service", None)
-        return None
+    def _get_save_cache(self) -> SaveCacheService:
+        """取得輕量存檔快取讀取器。"""
+        return self._save_cache
 
     def _get_identity_service(self) -> PlayerIdentityService | None:
         """從 ServerStatusCog 取得 PlayerIdentityService 實例。"""
@@ -208,14 +209,6 @@ class GameCommandsCog(commands.Cog):
             await self._send_response(channel, embed, plain, source)
             return
 
-        # 檢查存檔資料是否過期，過期則背景觸發解析（不阻塞回應）
-        save = self._get_save_service()
-        if save is not None and save.is_available and not save.is_parsing:
-            settings = getattr(self.bot, "settings", None)
-            cooldown = getattr(settings, "save_parse_cooldown", 60) if settings else 60
-            if save.is_stale(cooldown):
-                self._spawn_background(self._trigger_parse(save))
-
         # 路由到對應的指令處理器
         try:
             if cmd_name == "coords":
@@ -259,27 +252,16 @@ class GameCommandsCog(commands.Cog):
                 except Exception as e:
                     logger.error("Failed to send RCON response: %s", e)
 
-    async def _trigger_parse(self, save: SaveService) -> None:
-        """背景觸發存檔解析（由指令的 stale 檢查觸發）。"""
-        try:
-            success = await save.parse_save()
-            if success:
-                logger.info("On-demand save parse triggered by command completed")
-            else:
-                logger.warning("On-demand save parse failed")
-        except Exception:
-            logger.exception("On-demand save parse error")
-
     # === 指令處理器 ===
 
     async def _cmd_coords(
         self, player_name: str, locale: str
     ) -> tuple[discord.Embed, str]:
         """!coords / !位置 — 顯示玩家座標。"""
-        save = self._get_save_service()
+        save = self._get_save_cache()
         identity = self._get_identity_service()
 
-        if save is None or not save.is_available:
+        if not save.is_available:
             return self._error_response("cmd.no_save_data", locale)
 
         if identity is None:
@@ -328,10 +310,10 @@ class GameCommandsCog(commands.Cog):
         self, player_name: str, locale: str
     ) -> tuple[discord.Embed, str]:
         """!stats / !狀態 — 顯示玩家生存狀態。"""
-        save = self._get_save_service()
+        save = self._get_save_cache()
         identity = self._get_identity_service()
 
-        if save is None or not save.is_available:
+        if not save.is_available:
             return self._error_response("cmd.no_save_data", locale)
 
         if identity is None:
@@ -397,10 +379,10 @@ class GameCommandsCog(commands.Cog):
 
     async def _cmd_top(self, locale: str) -> tuple[discord.Embed, str]:
         """!top / !排行 — 存活天數排行榜。"""
-        save = self._get_save_service()
+        save = self._get_save_cache()
         identity = self._get_identity_service()
 
-        if save is None or not save.is_available:
+        if not save.is_available:
             return self._error_response("cmd.no_save_data", locale)
 
         limit = 10
@@ -452,10 +434,10 @@ class GameCommandsCog(commands.Cog):
 
     async def _cmd_kills(self, locale: str) -> tuple[discord.Embed, str]:
         """!kills / !擊殺 — 擊殺數排行榜。"""
-        save = self._get_save_service()
+        save = self._get_save_cache()
         identity = self._get_identity_service()
 
-        if save is None or not save.is_available:
+        if not save.is_available:
             return self._error_response("cmd.no_save_data", locale)
 
         limit = 10
@@ -509,9 +491,9 @@ class GameCommandsCog(commands.Cog):
 
     async def _cmd_server(self, locale: str) -> tuple[discord.Embed, str]:
         """!server / !伺服器 — 伺服器遊戲狀態。"""
-        save = self._get_save_service()
+        save = self._get_save_cache()
 
-        if save is None or not save.is_available:
+        if not save.is_available:
             return self._error_response("cmd.no_save_data", locale)
 
         game_state = await save.get_game_state()
